@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { getSocket } from '../api/socket';
 
 type Card = { rank:number; suit:'♣'|'♦'|'♥'|'♠' };
 type Player = {
@@ -83,6 +84,32 @@ export default function Controls({
     && typeof hero?.seat === 'number'
     && Array.isArray(state.revealSeats)
     && state.revealSeats.includes(hero.seat);
+
+  // --- חדש: כפתור "התחל משחק" רק לבעל החדר כאשר stage=waiting ---
+  if (state.stage === 'waiting') {
+    const iAmOwner = !!hero?.isOwner;
+    const start = () => {
+      getSocket().emit('startGame', { code: state.code }, (res?: any) => {
+        if (res?.error) alert(res.error);
+      });
+    };
+    return (
+      <div className="w-full mt-2">
+        <div className="text-xs text-slate-500 mb-2">
+          שלב: {stageLabel(state.stage)}
+          {" • "}בליינדים: {currency}{state.smallBlind}/{state.bigBlind}
+        </div>
+        <div className="flex items-center gap-2">
+          {iAmOwner ? (
+            <button className={`${btn} ${primary}`} onClick={start}>התחל משחק</button>
+          ) : (
+            <div className="text-sm text-slate-600">ממתינים לבעל החדר להתחיל…</div>
+          )}
+        </div>
+      </div>
+    );
+  }
+  // -----------------------------------------------------------------
 
   return (
     <div className="w-full mt-2">
