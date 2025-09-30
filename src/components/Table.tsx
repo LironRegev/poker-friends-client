@@ -50,7 +50,7 @@ const rankToWord = (r: number) => {
   return 'Ace'; // 14
 };
 
-const fileForCard = (c: Card) => `${suitToWord(c.suit)}${rankToWord(c.rank)}`;
+const fileForCard = (c: Card) => `${suitToWord(c.suit)}${rankToWord(c.rank)}.png`;
 
 function CardImg({ card }:{ card: Card }) {
   const src = `${CARD_DIR}/${fileForCard(card)}`;
@@ -597,8 +597,8 @@ export default function Table({
                 }
                 .hero-skin input[type="number"]{ -moz-appearance: textfield; }
 
-                /* ---- OVERRIDE: טקסט שחור ל-WinnerBadge בלבד ---- */
-                .winner-badge-override, .winner-badge-override * { color:#000 !important; }
+                /* טקסט שחור לבאדג' מנצח גם בתוך hero-skin */
+                .winner-text-force, .winner-text-force * { color:#000 !important; }
               `}</style>
 
               <div className="flex items-center justify-between">
@@ -623,7 +623,7 @@ export default function Table({
                 )}
 
                 {state.lastWinners && state.lastWinners.length > 0 && (
-                  <div className="winner-badge-override">
+                  <div className="winner-text-force">
                     <WinnerBadge winners={state.lastWinners} currency={currency} heroSeat={hero.seat} />
                   </div>
                 )}
