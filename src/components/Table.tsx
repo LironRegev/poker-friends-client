@@ -723,28 +723,34 @@ function BoardCards({
   const used    = new Set(winOverlay?.usedBoardIdxs ?? []);
 
   return (
-    <div className="flex items-center justify-center gap-2">
+    <div className="flex items-center justify-center gap-2 overflow-visible">
       {Array.from({ length: 5 }).map((_, i) => {
         const c = community[i];
         const faceKey = `face-${i}-${appearKeys[i]}`;
 
-        const isFalling   = winOverlay && phase==='fall'  && falling.has(i);
-        const showEnter   = winOverlay && (phase==='enter' || phase==='hold') && falling.has(i);
-        const goldBoard   = winOverlay && phase!=='idle' && used.has(i) && !falling.has(i);
+        // רפאים: הקלף הישן שלא השתתף ביד המנצחת
+        const ghosted   = !!winOverlay && phase !== 'idle' && falling.has(i);
+        const animateNow= !!winOverlay && phase === 'fall' && falling.has(i);
+
+        // הקלף החדש שנכנס
+        const showEnter = winOverlay && (phase==='enter' || phase==='hold') && falling.has(i);
+        // זהב: רק הקלפים שנשארו על הלוח ומשתתפים ביד המנצחת
+        const goldBoard = !!winOverlay && phase!=='idle' && used.has(i) && !falling.has(i);
 
         const wrapperClasses = [
           "relative",
           "w-[80px] h-[120px]",
           "rounded-[0.3rem]",
           goldBoard ? "ring-2 ring-amber-400 ring-offset-[3px] ring-offset-[#5a463a]" : "",
-          "overflow-hidden",
+          "overflow-visible",
         ].join(" ");
 
-        const fallingStyle: React.CSSProperties | undefined = isFalling ? {
-          transform: 'translate3d(0,18px,0)',
+        // הקלף הישן – יעלה למעלה מעט, מעט שקוף ואפור; בלי שום ring
+        const ghostStyle: React.CSSProperties | undefined = ghosted ? {
+          transform: 'translate3d(0,-45px,0) translateZ(0)',
           filter: 'grayscale(1) brightness(0.9)',
-          opacity: 0.55,
-          transition: 'transform 320ms ease, filter 320ms ease, opacity 320ms ease',
+          opacity: 0.45,
+          transition: animateNow ? 'transform 320ms ease, filter 320ms ease, opacity 320ms ease' : undefined,
           willChange: 'transform, opacity, filter'
         } : undefined;
 
@@ -752,7 +758,8 @@ function BoardCards({
 
         return (
           <div key={i} className={wrapperClasses}>
-            <div style={fallingStyle}>
+            {/* הקלף המקורי בלוח (יהפוך לרפאים אם מוחלף) */}
+            <div style={ghostStyle}>
               {c ? (
                 <AnimatedFace key={faceKey} delayMs={delays[i]}>
                   <div className="w-full h-full rounded-[0.3rem] shadow-[0_8px_16px_rgba(0,0,0,0.35)]">
@@ -764,10 +771,11 @@ function BoardCards({
               )}
             </div>
 
+            {/* הקלף החדש שנכנס – ללא שום ring */}
             {enterCard && (
-              <div className="absolute inset-0 pointer-events-none">
+              <div className="absolute inset-0">
                 <SlideIn>
-                  <div className="w-full h-full rounded-[0.3rem] ring-2 ring-amber-500 ring-offset-[3px] ring-offset-[#5a463a] shadow-[0_0_0_4px_rgba(251,191,36,0.22)]">
+                  <div className="w-full h-full rounded-[0.3rem]">
                     <CardImg card={enterCard} />
                   </div>
                 </SlideIn>
@@ -779,6 +787,7 @@ function BoardCards({
     </div>
   );
 }
+
 
 function HeroCards({ hole, compact = false }:{ hole: Card[]; compact?: boolean }) {
   const sz = compact ? ['w-[64px] h-[96px]'] : ['w-[80px] h-[120px]'];
