@@ -391,6 +391,45 @@ export default function Table({
   const heroCompact = state.stage === 'showdown';
   const heroTurn = hero ? isSeatTurn(hero.seat) : false;
 
+  /* ====== NEW: שילוב היסטוריה + ויזואל בעת העלאה (RAISE/BET) ====== */
+  const [liveBanner, setLiveBanner] = useState<null | { text: string; key: number }>(null);
+  const [potPulse, setPotPulse] = useState(false);
+  const [highlightSeat, setHighlightSeat] = useState<number | null>(null);
+  const prevBetRef = useRef<number>(state.currentBet);
+  const prevStageRef = useRef<Stage>(state.stage);
+
+  useEffect(() => {
+    const prevBet = prevBetRef.current;
+    const increased = state.currentBet > prevBet;
+    prevBetRef.current = state.currentBet;
+
+    const stageOk = ['preflop','flop','turn','river'].includes(state.stage);
+    const stageChanged = prevStageRef.current !== state.stage;
+    prevStageRef.current = state.stage;
+
+    // נמנע מטריגר כשנכנסים לסיבוב חדש (currentBet לעיתים מתאפס)
+    if (!stageOk || state.lastAggressorSeat == null) return;
+    if (increased) {
+      const aggr = state.players.find(p => p.seat === state.lastAggressorSeat);
+      const who = aggr?.name ?? 'שחקן';
+      const txt = `${who} העלה ל־${currency}${state.currentBet}`;
+
+      setLiveBanner({ text: txt, key: Date.now() });
+      setPotPulse(true);
+      setHighlightSeat(state.lastAggressorSeat);
+
+      window.setTimeout(() => setPotPulse(false), 650);
+      window.setTimeout(() => setHighlightSeat(null), 900);
+      window.setTimeout(() => setLiveBanner(null), 2600);
+    } else if (stageChanged) {
+      // ניקוי בטיחותי בין שלבים
+      setPotPulse(false);
+      setHighlightSeat(null);
+      setLiveBanner(null);
+    }
+  }, [state.currentBet, state.lastAggressorSeat, state.stage, state.players, currency]);
+  /* ====== END NEW ====== */
+
   return (
     <div className="w-full h-full flex flex-col gap-3">
       {/* === CSS קטן להבהוב (outline לבן בלבד) === */}
@@ -401,6 +440,11 @@ export default function Table({
         }
         .turn-outline { animation: ringPulse 1.1s ease-in-out infinite; border-radius: 22px; }
       `}</style>
+
+      {/* === NEW: Live Banner כשיש העלאה === */}
+      {liveBanner && (
+        <LiveBanner text={liveBanner.text} />
+      )}
 
       {/* רצועת שחקנים למעלה */}
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
@@ -421,7 +465,9 @@ export default function Table({
                 ? 'border-2 border-rose-500 bg-rose-50 p-3'
                 : isTurn
                   ? 'border-2 border-emerald-500 bg-emerald-50 p-3'
-                  : 'border border-slate-200 bg-white p-2'
+                  : 'border border-slate-200 bg-white p-2',
+            // NEW: הדגשה עדינה לשחקן שהעלה
+            (highlightSeat === p.seat) ? 'outline outline-4 outline-amber-300/70 shadow-lg' : ''
           ].join(' ');
 
           return (
@@ -510,7 +556,7 @@ export default function Table({
 
             {/* POT overlay למעלה-שמאל */}
             <div className="absolute left-5 top-3 md:left-96 md:top-2 z-10 pointer-events-none select-none">
-              <div className="flex items-baseline gap-2 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.65)]">
+              <div className={`flex items-baseline gap-2 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.65)] transition-all duration-500 ${potPulse ? 'ring-2 ring-amber-300 rounded-full px-2 scale-105' : ''}`}>
                 <span className="font-bold">Pot</span>
                 <span className="font-extrabold">{currency}{state.pot}</span>
               </div>
@@ -543,7 +589,9 @@ export default function Table({
                     ? (heroCompact ? 'border-2 border-rose-500 bg-rose-50 p-2.5' : 'border-2 border-rose-500 bg-rose-50 p-4')
                     : (heroCompact
                         ? `border border-[#2E7D32] p-2`
-                        : `border border-[#2E7D32] p-3`)
+                        : `border border-[#2E7D32] p-3`),
+                // NEW: הדגשה עדינה אם ה-HERO הוא המעלה
+                (highlightSeat === hero.seat) ? 'outline outline-4 outline-amber-300/70 shadow-lg' : ''
               ].join(' ')}
             >
               {/* HERO styles */}
@@ -646,6 +694,17 @@ export default function Table({
 }
 
 /* ---------- רכיבי משנה ---------- */
+
+// NEW: Live Banner קומפוננטה קטנה לבאנר העלאה
+function LiveBanner({ text }: { text: string }) {
+  return (
+    <div className="pointer-events-none fixed top-3 inset-x-0 z-[70] flex justify-center">
+      <div className="rounded-full border border-amber-300 bg-amber-100/90 px-4 py-1 shadow text-amber-900 font-semibold tracking-wide">
+        {text} <span className="ml-1">📈</span>
+      </div>
+    </div>
+  );
+}
 
 function Chip({ label, title }:{label:string; title?:string}) {
   return (

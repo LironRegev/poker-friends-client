@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { getSocket } from '../api/socket';
 
 type Card = { rank:number; suit:'♣'|'♦'|'♥'|'♠' };
@@ -17,7 +17,7 @@ type State = {
   smallBlind: number;
   bigBlind: number;
   currentBet: number;
-  minRaise: number;
+  minRaise: number; // קיים ב-state אך לא משתמשים בו למינימום אצלנו
   pot: number;
   community: Card[];
   turnSeat: number;
@@ -68,7 +68,19 @@ export default function Controls({
   const canBet = myTurn && state.currentBet === 0;
   const canRaise = myTurn && state.currentBet > 0;
 
-  const [amount, setAmount] = useState<number>(state.currentBet || state.bigBlind);
+  // ===== דלתא ל-RAISE BY/BET BY =====
+  const BB = state.bigBlind || 1;
+  const [delta, setDelta] = useState<number>(BB);
+
+  // לאפס דלתא ל-BB בכל כניסה לתור
+  useEffect(() => {
+    if (myTurn) setDelta(BB);
+  }, [myTurn, BB]);
+
+  // לאפס דלתא ל-BB כשיש שינוי ב-currentBet (למשל אחרי רייז של יריב)
+  useEffect(() => {
+    setDelta(BB);
+  }, [state.currentBet, BB]);
 
   const disabledClass = "opacity-50 cursor-not-allowed";
   const btn = "px-3 py-2 rounded-lg font-semibold transition";
@@ -79,13 +91,34 @@ export default function Controls({
 
   const currency = state.currency ?? '₪';
 
-  // חדש: האם ההירו רשאי לעשות Show/Muck?
+  // האם ההירו רשאי לעשות Show/Muck?
   const heroCanReveal = state.stage === 'showdown'
     && typeof hero?.seat === 'number'
     && Array.isArray(state.revealSeats)
     && state.revealSeats.includes(hero.seat);
 
-  // --- חדש: כפתור "התחל משחק" רק לבעל החדר כאשר stage=waiting ---
+  // toCall להצגת סכום על CALL (UI אינפורמטיבי)
+  const toCall = useMemo(() => {
+    if (!canCall && !showSBComplete) return 0;
+    if (showSBComplete) return completeDiff;
+    return state.currentBet;
+  }, [canCall, showSBComplete, completeDiff, state.currentBet]);
+
+  // ===== BY (ללא יישור למכפלת BB, מינימום קבוע = BB) =====
+  function handleRaiseBy() {
+    // מותר כל סכום ≥ BB
+    const legalDelta = Math.max(Math.floor(delta), BB);
+    const target = state.currentBet + legalDelta;
+    onAction('raise', target);
+  }
+
+  function handleBetBy() {
+    // כשאין הימור: BET BY לפחות BB
+    const legalBet = Math.max(Math.floor(delta), BB);
+    onAction('bet', legalBet);
+  }
+
+  // --- "התחל משחק" ל-owner בלבד ב-waiting ---
   if (state.stage === 'waiting') {
     const iAmOwner = !!hero?.isOwner;
     const start = () => {
@@ -109,7 +142,7 @@ export default function Controls({
       </div>
     );
   }
-  // -----------------------------------------------------------------
+  // ---------------------------------------
 
   return (
     <div className="w-full mt-2">
@@ -129,7 +162,7 @@ export default function Controls({
         </div>
       )}
 
-      {/* כפתורי פעולה רגילים רק אם זה לא שואודאון */}
+      {/* פעולות (לא בשואודאון) */}
       {['preflop','flop','turn','river'].includes(state.stage) && (
         <div className="flex flex-wrap items-center gap-2">
           {/* Fold */}
@@ -151,29 +184,58 @@ export default function Controls({
             <button className={`${btn} ${outline}`} onClick={()=> onAction('check')}>Check</button>
           )}
 
-          {/* Call */}
+          {/* CALL (מציג סכום) */}
           {showSBComplete ? (
             <button className={`${btn} ${primary}`} onClick={()=> onAction('call')}>
               Call {completeDiff > 0 ? `(${currency}${completeDiff})` : ''}
             </button>
           ) : canCall ? (
-            <button className={`${btn} ${primary}`} onClick={()=> onAction('call')}>Call</button>
+            <button className={`${btn} ${primary}`} onClick={()=> onAction('call')}>
+              {`Call${toCall ? ` (${currency}${toCall})` : ''}`}
+            </button>
           ) : null}
 
-          {/* סכום + Raise/Bet */}
-          <div className="flex items-center gap-2 ml-auto">
-            <input
-              type="number"
-              min={1}
-              value={amount}
-              onChange={(e)=> setAmount(Math.max(1, Math.floor(Number(e.target.value)||0)))}
-              className="w-28 rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500"
-            />
+          {/* מפריד גמיש */}
+          <div className="grow" />
+
+          {/* שדה וכפתורי BY */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={1}
+                step={1}
+                value={delta}
+                onChange={(e)=> setDelta(Math.max(1, Math.floor(Number(e.target.value)||0)))}
+                className="w-28 rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500"
+              />
+              <span className="text-[11px] text-slate-500">
+                {state.currentBet === 0
+                  ? `min bet: ${currency}${BB}`
+                  : `min raise: ${currency}${BB}`}
+              </span>
+            </div>
+
             {canBet && (
-              <button className={`${btn} ${outline}`} onClick={()=> onAction('bet', amount)}>Raise</button>
+              <button
+                className={`${btn} ${outline} ${!myTurn ? disabledClass : ''}`}
+                onClick={handleBetBy}
+                disabled={!myTurn}
+                title="Bet By (מינימום BB, ללא יישור למכפלת BB)"
+              >
+                BET BY
+              </button>
             )}
+
             {canRaise && (
-              <button className={`${btn} ${outline}`} onClick={()=> onAction('raise', amount)}>Raise</button>
+              <button
+                className={`${btn} ${outline} ${!myTurn ? disabledClass : ''}`}
+                onClick={handleRaiseBy}
+                disabled={!myTurn}
+                title="Raise By (מינימום BB, ללא יישור למכפלת BB)"
+              >
+                RAISE BY
+              </button>
             )}
           </div>
         </div>
