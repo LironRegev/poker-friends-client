@@ -1,9 +1,7 @@
-// Table.tsx
 import React, { useMemo, useEffect, useRef, useState } from 'react';
 import Controls from './Controls';
 import { emitShowCards, emitMuckCards } from '../api/socket';
 import WinnerBadge from './WinnerBadge';
-import { sfx } from '../sfx';
 
 type Card = { rank:number; suit:'♣'|'♦'|'♥'|'♠' };
 type Player = {
@@ -48,7 +46,7 @@ const rankToWord = (r: number) => {
   if (r === 11) return 'Jack';
   if (r === 12) return 'Queen';
   if (r === 13) return 'King';
-  return 'Ace';
+  return 'Ace'; // 14
 };
 
 const fileForCard = (c: Card) => `${suitToWord(c.suit)}${rankToWord(c.rank)}.png`;
@@ -98,7 +96,14 @@ function BackImg({ className = '' }:{ className?: string }) {
 }
 /* -------------------------------- */
 
-function AnimatedDeal({ children, delayMs = 0 }:{ children: React.ReactNode; delayMs?: number; }) {
+/** deal/appear חלק (GPU) */
+function AnimatedDeal({
+  children,
+  delayMs = 0,
+}:{
+  children: React.ReactNode;
+  delayMs?: number;
+}) {
   const [visible, setVisible] = useState(false);
   useEffect(() => {
     setVisible(false);
@@ -116,7 +121,14 @@ function AnimatedDeal({ children, delayMs = 0 }:{ children: React.ReactNode; del
   return <div style={style}>{children}</div>;
 }
 
-function FlipIn({ children, delayMs = 0 }:{ children: React.ReactNode; delayMs?: number; }) {
+/** flip עדין לחשיפת יריב (Show) */
+function FlipIn({
+  children,
+  delayMs = 0,
+}:{
+  children: React.ReactNode;
+  delayMs?: number;
+}) {
   const [visible, setVisible] = useState(false);
   useEffect(() => {
     setVisible(false);
@@ -135,7 +147,14 @@ function FlipIn({ children, delayMs = 0 }:{ children: React.ReactNode; delayMs?:
   return <div style={style}>{children}</div>;
 }
 
-function AnimatedFace({ children, delayMs = 0 }:{ children: React.ReactNode; delayMs?: number; }) {
+/** חשיפת קלפי קהילה (deal) – חלק */
+function AnimatedFace({
+  children,
+  delayMs = 0,
+}:{
+  children: React.ReactNode;
+  delayMs?: number;
+}) {
   const [visible, setVisible] = useState(false);
   useEffect(() => {
     setVisible(false);
@@ -153,7 +172,14 @@ function AnimatedFace({ children, delayMs = 0 }:{ children: React.ReactNode; del
   return <div style={style}>{children}</div>;
 }
 
-function SlideIn({ children, delayMs = 0 }:{ children: React.ReactNode; delayMs?: number; }) {
+/** כניסה “מלמטה” עדינה (לקלפי מנצח שמחליפים שני קלפי לוח) */
+function SlideIn({
+  children,
+  delayMs = 0,
+}:{
+  children: React.ReactNode;
+  delayMs?: number;
+}) {
   const [v, setV] = useState(false);
   useEffect(() => {
     setV(false);
@@ -165,8 +191,7 @@ function SlideIn({ children, delayMs = 0 }:{ children: React.ReactNode; delayMs?
     opacity: v ? 1 : 0,
     transform: v ? 'translate3d(0,0,0)' : 'translate3d(0,18px,0)',
     willChange: 'transform, opacity',
-    width: '100%',
-    height: '100%',
+    width: '100%', height: '100%',
   };
   return <div style={style}>{children}</div>;
 }
@@ -174,8 +199,7 @@ function SlideIn({ children, delayMs = 0 }:{ children: React.ReactNode; delayMs?
 /* ===== חישובי Best-5 ===== */
 function cmpRank(a:{cat:number;tb:number[]}, b:{cat:number;tb:number[]}): number {
   if (a.cat !== b.cat) return a.cat - b.cat;
-  const len = Max(a.tb.length, b.tb.length);
-  function Max(x:number,y:number){return x>y?x:y}
+  const len = Math.max(a.tb.length, b.tb.length);
   for (let i=0;i<len;i++){
     const x = a.tb[i] ?? 0, y = b.tb[i] ?? 0;
     if (x !== y) return x - y;
@@ -265,6 +289,11 @@ function best5From7(board: Card[], hole: Card[]) {
 }
 /* ===== סוף העזר ===== */
 
+/* ====== SFX ====== */
+const SFX_TURN = '/sfx/turn1.wav';
+const SFX_RAISE = '/sfx/poker_chips1-87592.mp3';
+/* ================= */
+
 export default function Table({
   state,
   me,
@@ -295,9 +324,11 @@ export default function Table({
   const isSeatTurn = (seat:number) =>
     seat === state.turnSeat && ['preflop','flop','turn','river'].includes(state.stage);
 
+  // מושבי זוכים
   const winnerSeats = useMemo(() => new Set((state.lastWinners ?? []).map(w => w.seat)), [state.lastWinners]);
   const isSeatWinner = (seat:number) => winnerSeats.has(seat);
 
+  // Show/Muck
   const onReveal = (kind:'show'|'muck') => {
     if (!state?.code) return;
     if (kind === 'show') emitShowCards(state.code);
@@ -363,23 +394,55 @@ export default function Table({
   const heroCompact = state.stage === 'showdown';
   const heroTurn = hero ? isSeatTurn(hero.seat) : false;
 
-  /* ====== סאונד: "תורך" (רק ל-hero) ====== */
-  const wasMyTurnRef = useRef(false);
-  useEffect(() => {
-    const prev = wasMyTurnRef.current;
-    const now  = heroTurn;
-    wasMyTurnRef.current = now;
-    if (!prev && now && ['preflop','flop','turn','river'].includes(state.stage)) {
-      sfx.play('turn');
-    }
-  }, [heroTurn, state.stage]);
-
-  /* ====== Raise/Bet Banner + סאונד ====== */
+  /* ====== NEW: שילוב היסטוריה + ויזואל בעת העלאה (RAISE/BET) + סאונד ====== */
   const [liveBanner, setLiveBanner] = useState<null | { text: string; key: number }>(null);
   const [potPulse, setPotPulse] = useState(false);
   const [highlightSeat, setHighlightSeat] = useState<number | null>(null);
   const prevBetRef = useRef<number>(state.currentBet);
   const prevStageRef = useRef<Stage>(state.stage);
+
+  // SFX refs
+  const turnSfxRef = useRef<HTMLAudioElement | null>(null);
+  const raiseSfxRef = useRef<HTMLAudioElement | null>(null);
+
+  // MUTE state (persisted)
+  const [showMute, setShowMute] = useState(false);
+  const [muteTurn, setMuteTurn] = useState<boolean>(false);
+  const [muteRaise, setMuteRaise] = useState<boolean>(false);
+
+  useEffect(() => {
+    // load persisted
+    try {
+      setMuteTurn(localStorage.getItem('pf_mute_turn') === '1');
+      setMuteRaise(localStorage.getItem('pf_mute_raise') === '1');
+    } catch {}
+    // init audio
+    turnSfxRef.current = new Audio(SFX_TURN);
+    raiseSfxRef.current = new Audio(SFX_RAISE);
+    if (turnSfxRef.current) { turnSfxRef.current.preload = 'auto'; }
+    if (raiseSfxRef.current) { raiseSfxRef.current.preload = 'auto'; }
+  }, []);
+
+  const playTurn = () => {
+    if (muteTurn) return;
+    const a = turnSfxRef.current;
+    if (!a) return;
+    try { a.currentTime = 0; a.play().catch(()=>{}); } catch {}
+  };
+  const playRaise = () => {
+    if (muteRaise) return;
+    const a = raiseSfxRef.current;
+    if (!a) return;
+    try { a.currentTime = 0; a.play().catch(()=>{}); } catch {}
+  };
+
+  // נגן סאונד התור רק כשהופך מ-False ל-True
+  const wasHeroTurnRef = useRef<boolean>(false);
+  useEffect(() => {
+    const was = wasHeroTurnRef.current;
+    if (heroTurn && !was) playTurn();
+    wasHeroTurnRef.current = heroTurn;
+  }, [heroTurn]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const prevBet = prevBetRef.current;
@@ -399,7 +462,7 @@ export default function Table({
       setLiveBanner({ text: txt, key: Date.now() });
       setPotPulse(true);
       setHighlightSeat(state.lastAggressorSeat);
-      sfx.play('raise'); // גם ALL-IN ישתמש בזה
+      playRaise(); // << סאונד צ'יפים על רייז/אול-אין
 
       window.setTimeout(() => setPotPulse(false), 650);
       window.setTimeout(() => setHighlightSeat(null), 900);
@@ -409,42 +472,38 @@ export default function Table({
       setHighlightSeat(null);
       setLiveBanner(null);
     }
-  }, [state.currentBet, state.lastAggressorSeat, state.stage, state.players, currency]);
+  }, [state.currentBet, state.lastAggressorSeat, state.stage, state.players, currency]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* ====== END NEW ====== */
 
-  /* ====== סאונד: ALL-IN (אותו צליל כמו RAISE) ====== */
-  const prevAllInRef = useRef<Record<number, boolean>>({});
+  // persist mute on change
   useEffect(() => {
-    if (!['preflop','flop','turn','river'].includes(state.stage)) {
-      prevAllInRef.current = {};
-      return;
-    }
-    const prev = prevAllInRef.current;
-    const cur: Record<number, boolean> = {};
-    let justAllIn = false;
-
-    state.players.forEach(p => {
-      cur[p.seat] = !!p.isAllIn;
-      if (!prev[p.seat] && cur[p.seat]) justAllIn = true;
-    });
-
-    prevAllInRef.current = cur;
-    if (justAllIn) {
-      sfx.play('raise');
-    }
-  }, [state.players, state.stage]);
+    try { localStorage.setItem('pf_mute_turn', muteTurn ? '1':'0'); } catch {}
+  }, [muteTurn]);
+  useEffect(() => {
+    try { localStorage.setItem('pf_mute_raise', muteRaise ? '1':'0'); } catch {}
+  }, [muteRaise]);
 
   return (
     <div className="w-full h-full flex flex-col gap-3">
-      {/* === CSS קטן להבהוב (outline לבן בלבד) === */}
+      {/* === CSS קטן להבהוב + אילוצים === */}
       <style>{`
         @keyframes ringPulse {
           0%,100% { box-shadow: 0 0 0 3px rgba(255,255,255,0.85), 0 0 18px rgba(255,255,255,0.55); }
           50%     { box-shadow: 0 0 0 1px rgba(255,255,255,0.25), 0 0 6px rgba(255,255,255,0.25); }
         }
         .turn-outline { animation: ringPulse 1.1s ease-in-out infinite; border-radius: 22px; }
+
+        /* טקסט לבן לכל רכיבי ה-HERO */
+        .hero-skin, .hero-skin * { color:#ffffff !important; font-weight:600; }
+
+        /* אילוץ טקסט שחור לבאדג' מנצח */
+        .winner-text-force, .winner-text-force * { color:#000 !important; }
+
+        /* אילוץ טקסט שחור לכל חלון/פופאובר שנעטף במחלקה הזו (ALL-IN, MUTE וכו') */
+        .force-dark, .force-dark * { color:#000 !important; }
       `}</style>
 
-      {/* Live Banner כשיש העלאה */}
+      {/* Live Banner */}
       {liveBanner && <LiveBanner text={liveBanner.text} />}
 
       {/* רצועת שחקנים למעלה */}
@@ -480,8 +539,8 @@ export default function Table({
                 <div className="text-xs text-slate-700">{currency}{p.stack}</div>
                 <div className="flex items-center gap-1 ml-auto">
                   {isDealer && <Chip label="D" title="Dealer" />}
-                  {isSB && <Chip label="SB" />}
-                  {isBB && <Chip label="BB" />}
+                  {isSB && <Chip label="SB" title="Small Blind" />}
+                  {isBB && <Chip label="BB" title="Big Blind" />}
                 </div>
               </div>
 
@@ -529,7 +588,7 @@ export default function Table({
         })}
       </div>
 
-      {/* שולחן + Pot overlay */}
+      {/* === שולחן === */}
       <div className="mt-1">
         <div className="relative mx-auto w-full max-w-[1100px] md:max-w-[1280px] -mt-2 md:-mt-2">
           <div className="relative mx-auto aspect-[13/3] max-h-[190px]">
@@ -549,7 +608,6 @@ export default function Table({
                 shadow-[inset_0_0_36px_rgba(0,0,0,0.22)]
               "
             />
-            {/* קו פנימי */}
             <div className="absolute inset-[12px] rounded-[999px] ring-1 ring-black/10 pointer-events-none" />
 
             {/* POT overlay */}
@@ -560,6 +618,7 @@ export default function Table({
               </div>
             </div>
 
+            {/* אזור הקלפים */}
             <div className="absolute inset-[12px] rounded-[999px] grid place-items-center">
               <BoardCards community={state.community} winOverlay={winOverlay} />
             </div>
@@ -571,13 +630,13 @@ export default function Table({
         ) : null}
       </div>
 
-      {/* HERO למטה + Controls + WinnerBadge */}
+      {/* HERO + Controls + WinnerBadge */}
       {hero && (
         <div className={`sticky bottom-0 ${heroCompact ? 'pt-1.5' : 'pt-3'} bg-gradient-to-t from-slate-50 via-slate-50/90 to-transparent`}>
           <div className={heroTurn ? 'turn-outline' : ''}>
             <div
               className={[
-                'relative', // חשוב כדי למקם תפריט מיוט בפינה
+                'relative', // חשוב: לעיגון כפתור ה-Mute כמוחלט
                 'rounded-2xl hero-skin hero-felt',
                 isSeatWinner(hero.seat)
                   ? (heroCompact ? 'border-2 border-amber-500 bg-amber-50 p-3' : 'border-2 border-amber-500 bg-amber-50 p-5')
@@ -589,13 +648,8 @@ export default function Table({
                 (highlightSeat === hero.seat) ? 'outline outline-4 outline-amber-300/70 shadow-lg' : ''
               ].join(' ')}
             >
-              {/* תפריט MUTE בפינה הימנית העליונה של ה-HERO */}
-              <div className="absolute right-2 top-5 md:top-10 z-[90]">
-                <HeroMuteMenu />
-              </div>
-
+              {/* HERO styles */}
               <style>{`
-                .hero-skin, .hero-skin * { color:#ffffff !important; font-weight:600; }
                 .hero-felt{
                   background-image:
                     radial-gradient(ellipse at 60% 40%, rgba(255,255,255,0.05), transparent 55%),
@@ -607,12 +661,14 @@ export default function Table({
                   background-position: 0 0, 0 0, 0 0, 9px 9px, 0 0;
                   filter: saturate(0.95) brightness(0.96);
                 }
+
                 .hero-skin button{
                   background: rgba(255,255,255,0.08);
                   border: 1px solid rgba(255,255,255,0.35);
                   color:#fff;
                 }
                 .hero-skin button:hover{ background: rgba(255,255,255,0.14); }
+
                 .hero-skin input[type="number"],
                 .hero-skin input[type="text"]{
                   background: rgba(255,255,255,0.08);
@@ -623,6 +679,7 @@ export default function Table({
                   outline:none;
                 }
                 .hero-skin input::placeholder{ color:rgba(255,255,255,0.7); }
+
                 .hero-skin input[type="number"]::-webkit-outer-spin-button,
                 .hero-skin input[type="number"]::-webkit-inner-spin-button{
                   -webkit-appearance: inner-spin-button;
@@ -635,16 +692,52 @@ export default function Table({
                   opacity: 1;
                 }
                 .hero-skin input[type="number"]{ -moz-appearance: textfield; }
-                ./* טקסט שחור לבאדג' מנצח גם בתוך hero-skin */
-.winner-text-force, .winner-text-force * { color:#000 !important; }
-
-/* תפריטים/פאנלים שצריכים טקסט שחור בתוך ה-HERO */
-.hero-exempt, .hero-exempt * {
-  color:#000 !important;
-  font-weight:500 !important;
-}
-
               `}</style>
+
+              {/* === כפתור MUTE בפינה (פתיחה למעלה, טקסט שחור) === */}
+              <div className="absolute right-3 top-38 z-50 select-none">
+                <div className="relative">
+                  <button
+                    className="rounded-full p-2 border border-white/60 bg-white/15 hover:bg-white/25 transition"
+                    onClick={()=> setShowMute(v=>!v)}
+                    title="השתקת צלילים"
+                  >
+                    {/* אייקון רמקול/מושתק לפי מצב */}
+                    <span aria-hidden>{(muteTurn || muteRaise) ? '🔇' : '🔊'}</span>
+                  </button>
+                  {showMute && (
+                    <div className="force-dark absolute right-0 bottom-full mb-2 w-56 bg-white border border-slate-200 rounded-xl shadow p-3">
+                      <div className="text-sm font-bold mb-2">השתקת צלילים</div>
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={muteTurn}
+                          onChange={(e)=> setMuteTurn(e.target.checked)}
+                        />
+                        Your Turn
+                      </label>
+                      <label className="flex items-center gap-2 text-sm mt-1">
+                        <input
+                          type="checkbox"
+                          checked={muteRaise}
+                          onChange={(e)=> setMuteRaise(e.target.checked)}
+                        />
+                        Raise / All-in
+                      </label>
+
+                      <div className="mt-3 flex justify-end">
+                        <button
+                          className="px-3 py-1 rounded-md border border-slate-300 bg-white hover:bg-slate-50 text-sm"
+                          onClick={()=> setShowMute(false)}
+                        >
+                          סגור
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              {/* === סוף כפתור MUTE === */}
 
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -655,17 +748,17 @@ export default function Table({
                   <div className="text-xs text-white/80">Seat {hero.seat+1}</div>
                   <div className="flex items-center gap-1">
                     {heroIsDealer && <Chip label="D" title="Dealer" />}
-                    {heroIsSB && <Chip label="SB" />}
-                    {heroIsBB && <Chip label="BB" />}
+                    {heroIsSB && <Chip label="SB" title="Small Blind" />}
+                    {heroIsBB && <Chip label="BB" title="Big Blind" />}
                   </div>
                 </div>
               </div>
 
+              {/* קלפי HERO + WinnerBadge (טקסט שחור) */}
               <div className="mt-2 flex flex-col items-center gap-3">
                 {hero.hole && hero.hole.length > 0 && (
                   <HeroCards hole={hero.hole} compact={heroCompact} />
                 )}
-
                 {state.lastWinners && state.lastWinners.length > 0 && (
                   <div className="winner-text-force">
                     <WinnerBadge winners={state.lastWinners} currency={currency} heroSeat={hero.seat} />
@@ -691,76 +784,6 @@ export default function Table({
 
 /* ---------- רכיבי משנה ---------- */
 
-function HeroMuteMenu() {
-  const [open, setOpen] = React.useState(false);
-  const panelRef = React.useRef<HTMLDivElement | null>(null);
-
-  const [muteTurn, setMuteTurn]   = React.useState<boolean>(sfx.isMuted('turn'));
-  const [muteRaise, setMuteRaise] = React.useState<boolean>(sfx.isMuted('raise'));
-
-  // סגירה בלחיצה בחוץ
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (!panelRef.current) return;
-      if (!panelRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    window.addEventListener('mousedown', onDown);
-    return () => window.removeEventListener('mousedown', onDown);
-  }, [open]);
-
-  const allMuted = muteTurn && muteRaise;
-
-  return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen(v => !v)}
-        className="rounded-full border border-white/30 bg-white/15 backdrop-blur px-2.5 py-1 text-sm shadow"
-        title="Sound settings"
-      >
-        {allMuted ? '🔇' : '🔊'}
-      </button>
-
-      {open && (
-        <div
-  ref={panelRef}
-  className="hero-exempt absolute right-0 mt-2 w-48 rounded-xl border border-white/30 bg-white/95 shadow-lg p-2"
->
-
-          <div className="px-2 py-1 text-xs font-bold uppercase tracking-wide text-black">השתקת צלילים</div>
-
-
-          <label className="flex items-center justify-between gap-2 px-2 py-1">
-            <span className="text-sm text-black">Your Turn</span>
-            <input
-              type="checkbox"
-              checked={muteTurn}
-              onChange={(e) => {
-                const v = e.target.checked;
-                setMuteTurn(v);
-                sfx.setMuted('turn', v);
-              }}
-            />
-          </label>
-
-          <label className="flex items-center justify-between gap-2 px-2 py-1">
-            <span className="text-sm text-black">Raise / All-in</span>
-            <input
-              type="checkbox"
-              checked={muteRaise}
-              onChange={(e) => {
-                const v = e.target.checked;
-                setMuteRaise(v);
-                sfx.setMuted('raise', v);
-              }}
-            />
-          </label>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function LiveBanner({ text }: { text: string }) {
   return (
     <div className="pointer-events-none fixed top-3 inset-x-0 z-[70] flex justify-center">
@@ -782,6 +805,7 @@ function Chip({ label, title }:{label:string; title?:string}) {
   );
 }
 
+/* === BoardCards על ה-felt, כולל אפקט המנצח באוברליי === */
 function BoardCards({
   community,
   winOverlay
