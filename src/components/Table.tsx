@@ -3,6 +3,7 @@ import React, { useMemo, useEffect, useRef, useState } from 'react';
 import Controls from './Controls';
 import { emitShowCards, emitMuckCards } from '../api/socket';
 import WinnerBadge from './WinnerBadge';
+import { sfx } from '../sfx';
 
 type Card = { rank:number; suit:'♣'|'♦'|'♥'|'♠' };
 type Player = {
@@ -47,7 +48,7 @@ const rankToWord = (r: number) => {
   if (r === 11) return 'Jack';
   if (r === 12) return 'Queen';
   if (r === 13) return 'King';
-  return 'Ace'; // 14
+  return 'Ace';
 };
 
 const fileForCard = (c: Card) => `${suitToWord(c.suit)}${rankToWord(c.rank)}.png`;
@@ -97,14 +98,7 @@ function BackImg({ className = '' }:{ className?: string }) {
 }
 /* -------------------------------- */
 
-/** deal/appear חלק (GPU) */
-function AnimatedDeal({
-  children,
-  delayMs = 0,
-}:{
-  children: React.ReactNode;
-  delayMs?: number;
-}) {
+function AnimatedDeal({ children, delayMs = 0 }:{ children: React.ReactNode; delayMs?: number; }) {
   const [visible, setVisible] = useState(false);
   useEffect(() => {
     setVisible(false);
@@ -122,14 +116,7 @@ function AnimatedDeal({
   return <div style={style}>{children}</div>;
 }
 
-/** flip עדין לחשיפת יריב (Show) */
-function FlipIn({
-  children,
-  delayMs = 0,
-}:{
-  children: React.ReactNode;
-  delayMs?: number;
-}) {
+function FlipIn({ children, delayMs = 0 }:{ children: React.ReactNode; delayMs?: number; }) {
   const [visible, setVisible] = useState(false);
   useEffect(() => {
     setVisible(false);
@@ -148,14 +135,7 @@ function FlipIn({
   return <div style={style}>{children}</div>;
 }
 
-/** חשיפת קלפי קהילה (deal) – חלק */
-function AnimatedFace({
-  children,
-  delayMs = 0,
-}:{
-  children: React.ReactNode;
-  delayMs?: number;
-}) {
+function AnimatedFace({ children, delayMs = 0 }:{ children: React.ReactNode; delayMs?: number; }) {
   const [visible, setVisible] = useState(false);
   useEffect(() => {
     setVisible(false);
@@ -173,14 +153,7 @@ function AnimatedFace({
   return <div style={style}>{children}</div>;
 }
 
-/** כניסה “מלמטה” עדינה (לקלפי מנצח שמחליפים שני קלפי לוח) */
-function SlideIn({
-  children,
-  delayMs = 0,
-}:{
-  children: React.ReactNode;
-  delayMs?: number;
-}) {
+function SlideIn({ children, delayMs = 0 }:{ children: React.ReactNode; delayMs?: number; }) {
   const [v, setV] = useState(false);
   useEffect(() => {
     setV(false);
@@ -192,7 +165,8 @@ function SlideIn({
     opacity: v ? 1 : 0,
     transform: v ? 'translate3d(0,0,0)' : 'translate3d(0,18px,0)',
     willChange: 'transform, opacity',
-    width: '100%', height: '100%',
+    width: '100%',
+    height: '100%',
   };
   return <div style={style}>{children}</div>;
 }
@@ -321,11 +295,9 @@ export default function Table({
   const isSeatTurn = (seat:number) =>
     seat === state.turnSeat && ['preflop','flop','turn','river'].includes(state.stage);
 
-  // מושבי זוכים
   const winnerSeats = useMemo(() => new Set((state.lastWinners ?? []).map(w => w.seat)), [state.lastWinners]);
   const isSeatWinner = (seat:number) => winnerSeats.has(seat);
 
-  // Show/Muck
   const onReveal = (kind:'show'|'muck') => {
     if (!state?.code) return;
     if (kind === 'show') emitShowCards(state.code);
@@ -391,7 +363,18 @@ export default function Table({
   const heroCompact = state.stage === 'showdown';
   const heroTurn = hero ? isSeatTurn(hero.seat) : false;
 
-  /* ====== NEW: שילוב היסטוריה + ויזואל בעת העלאה (RAISE/BET) ====== */
+  /* ====== סאונד: "תורך" (רק ל-hero) ====== */
+  const wasMyTurnRef = useRef(false);
+  useEffect(() => {
+    const prev = wasMyTurnRef.current;
+    const now  = heroTurn;
+    wasMyTurnRef.current = now;
+    if (!prev && now && ['preflop','flop','turn','river'].includes(state.stage)) {
+      sfx.play('turn');
+    }
+  }, [heroTurn, state.stage]);
+
+  /* ====== Raise/Bet Banner + סאונד ====== */
   const [liveBanner, setLiveBanner] = useState<null | { text: string; key: number }>(null);
   const [potPulse, setPotPulse] = useState(false);
   const [highlightSeat, setHighlightSeat] = useState<number | null>(null);
@@ -407,7 +390,6 @@ export default function Table({
     const stageChanged = prevStageRef.current !== state.stage;
     prevStageRef.current = state.stage;
 
-    // נמנע מטריגר כשנכנסים לסיבוב חדש (currentBet לעיתים מתאפס)
     if (!stageOk || state.lastAggressorSeat == null) return;
     if (increased) {
       const aggr = state.players.find(p => p.seat === state.lastAggressorSeat);
@@ -417,18 +399,39 @@ export default function Table({
       setLiveBanner({ text: txt, key: Date.now() });
       setPotPulse(true);
       setHighlightSeat(state.lastAggressorSeat);
+      sfx.play('raise'); // גם ALL-IN ישתמש בזה
 
       window.setTimeout(() => setPotPulse(false), 650);
       window.setTimeout(() => setHighlightSeat(null), 900);
       window.setTimeout(() => setLiveBanner(null), 2600);
     } else if (stageChanged) {
-      // ניקוי בטיחותי בין שלבים
       setPotPulse(false);
       setHighlightSeat(null);
       setLiveBanner(null);
     }
   }, [state.currentBet, state.lastAggressorSeat, state.stage, state.players, currency]);
-  /* ====== END NEW ====== */
+
+  /* ====== סאונד: ALL-IN (אותו צליל כמו RAISE) ====== */
+  const prevAllInRef = useRef<Record<number, boolean>>({});
+  useEffect(() => {
+    if (!['preflop','flop','turn','river'].includes(state.stage)) {
+      prevAllInRef.current = {};
+      return;
+    }
+    const prev = prevAllInRef.current;
+    const cur: Record<number, boolean> = {};
+    let justAllIn = false;
+
+    state.players.forEach(p => {
+      cur[p.seat] = !!p.isAllIn;
+      if (!prev[p.seat] && cur[p.seat]) justAllIn = true;
+    });
+
+    prevAllInRef.current = cur;
+    if (justAllIn) {
+      sfx.play('raise');
+    }
+  }, [state.players, state.stage]);
 
   return (
     <div className="w-full h-full flex flex-col gap-3">
@@ -441,10 +444,8 @@ export default function Table({
         .turn-outline { animation: ringPulse 1.1s ease-in-out infinite; border-radius: 22px; }
       `}</style>
 
-      {/* === NEW: Live Banner כשיש העלאה === */}
-      {liveBanner && (
-        <LiveBanner text={liveBanner.text} />
-      )}
+      {/* Live Banner כשיש העלאה */}
+      {liveBanner && <LiveBanner text={liveBanner.text} />}
 
       {/* רצועת שחקנים למעלה */}
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
@@ -456,7 +457,6 @@ export default function Table({
           const isWinner = isSeatWinner(p.seat);
           const oppCardCount = Math.max(0, p.holeCount ?? 2);
 
-          // קדימות: Winner (זהב) > Fold (אדום) > Turn (ירוק) > רגיל
           const containerClass = [
             'rounded-xl flex flex-col gap-1.5',
             isWinner
@@ -466,7 +466,6 @@ export default function Table({
                 : isTurn
                   ? 'border-2 border-emerald-500 bg-emerald-50 p-3'
                   : 'border border-slate-200 bg-white p-2',
-            // NEW: הדגשה עדינה לשחקן שהעלה
             (highlightSeat === p.seat) ? 'outline outline-4 outline-amber-300/70 shadow-lg' : ''
           ].join(' ');
 
@@ -481,8 +480,8 @@ export default function Table({
                 <div className="text-xs text-slate-700">{currency}{p.stack}</div>
                 <div className="flex items-center gap-1 ml-auto">
                   {isDealer && <Chip label="D" title="Dealer" />}
-                  {isSB && <Chip label="SB" title="Small Blind" />}
-                  {isBB && <Chip label="BB" title="Big Blind" />}
+                  {isSB && <Chip label="SB" />}
+                  {isBB && <Chip label="BB" />}
                 </div>
               </div>
 
@@ -491,7 +490,6 @@ export default function Table({
                 {p.isAllIn ? ' • ALL-IN' : ''}
               </div>
 
-              {/* קלפי היריבים (Back → Flip כש-Show) */}
               {oppCardCount > 0 && (
                 <div className={`flex items-start gap-1.5 mt-1 ${!p.inHand ? 'opacity-50' : ''}`}>
                   {Array.from({ length: oppCardCount }).map((_, i) => {
@@ -531,7 +529,7 @@ export default function Table({
         })}
       </div>
 
-      {/* === שולחן אובלי בלבד (בלי מסגרת לבנה), עם Pot כ-overlay בפינה השמאלית העליונה === */}
+      {/* שולחן + Pot overlay */}
       <div className="mt-1">
         <div className="relative mx-auto w-full max-w-[1100px] md:max-w-[1280px] -mt-2 md:-mt-2">
           <div className="relative mx-auto aspect-[13/3] max-h-[190px]">
@@ -551,10 +549,10 @@ export default function Table({
                 shadow-[inset_0_0_36px_rgba(0,0,0,0.22)]
               "
             />
-            {/* קו פנימי עדין */}
+            {/* קו פנימי */}
             <div className="absolute inset-[12px] rounded-[999px] ring-1 ring-black/10 pointer-events-none" />
 
-            {/* POT overlay למעלה-שמאל */}
+            {/* POT overlay */}
             <div className="absolute left-5 top-3 md:left-96 md:top-2 z-10 pointer-events-none select-none">
               <div className={`flex items-baseline gap-2 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.65)] transition-all duration-500 ${potPulse ? 'ring-2 ring-amber-300 rounded-full px-2 scale-105' : ''}`}>
                 <span className="font-bold">Pot</span>
@@ -562,26 +560,24 @@ export default function Table({
               </div>
             </div>
 
-            {/* אזור הקלפים על ה-felt */}
             <div className="absolute inset-[12px] rounded-[999px] grid place-items-center">
               <BoardCards community={state.community} winOverlay={winOverlay} />
             </div>
           </div>
         </div>
 
-        {/* הודעה/טקסט מתחת לשולחן */}
         {state.message ? (
           <div className="mt-2 text-center text-xs text-slate-500">{state.message}</div>
         ) : null}
       </div>
 
-      {/* HERO למטה + קונטרולס + WinnerBadge */}
+      {/* HERO למטה + Controls + WinnerBadge */}
       {hero && (
         <div className={`sticky bottom-0 ${heroCompact ? 'pt-1.5' : 'pt-3'} bg-gradient-to-t from-slate-50 via-slate-50/90 to-transparent`}>
-          {/* עטיפה שמוסיפה רק קו חיצוני מהבהב כשזה התור של ה-HERO */}
           <div className={heroTurn ? 'turn-outline' : ''}>
             <div
               className={[
+                'relative', // חשוב כדי למקם תפריט מיוט בפינה
                 'rounded-2xl hero-skin hero-felt',
                 isSeatWinner(hero.seat)
                   ? (heroCompact ? 'border-2 border-amber-500 bg-amber-50 p-3' : 'border-2 border-amber-500 bg-amber-50 p-5')
@@ -590,16 +586,16 @@ export default function Table({
                     : (heroCompact
                         ? `border border-[#2E7D32] p-2`
                         : `border border-[#2E7D32] p-3`),
-                // NEW: הדגשה עדינה אם ה-HERO הוא המעלה
                 (highlightSeat === hero.seat) ? 'outline outline-4 outline-amber-300/70 shadow-lg' : ''
               ].join(' ')}
             >
-              {/* HERO styles */}
-              <style>{`
-                /* טקסט לבן+Bold לכל רכיבי ה-HERO */
-                .hero-skin, .hero-skin * { color:#ffffff !important; font-weight:600; }
+              {/* תפריט MUTE בפינה הימנית העליונה של ה-HERO */}
+              <div className="absolute right-2 top-5 md:top-10 z-[90]">
+                <HeroMuteMenu />
+              </div>
 
-                /* Felt ירוק עם טקסטורה עדינה */
+              <style>{`
+                .hero-skin, .hero-skin * { color:#ffffff !important; font-weight:600; }
                 .hero-felt{
                   background-image:
                     radial-gradient(ellipse at 60% 40%, rgba(255,255,255,0.05), transparent 55%),
@@ -611,15 +607,12 @@ export default function Table({
                   background-position: 0 0, 0 0, 0 0, 9px 9px, 0 0;
                   filter: saturate(0.95) brightness(0.96);
                 }
-
-                /* כפתורים וקלטים עדינים כדי שלא "ייעלמו" על felt */
                 .hero-skin button{
                   background: rgba(255,255,255,0.08);
                   border: 1px solid rgba(255,255,255,0.35);
                   color:#fff;
                 }
                 .hero-skin button:hover{ background: rgba(255,255,255,0.14); }
-
                 .hero-skin input[type="number"],
                 .hero-skin input[type="text"]{
                   background: rgba(255,255,255,0.08);
@@ -630,8 +623,6 @@ export default function Table({
                   outline:none;
                 }
                 .hero-skin input::placeholder{ color:rgba(255,255,255,0.7); }
-
-                /* ספינרים: בלי קופסה שחורה, רק האייקונים */
                 .hero-skin input[type="number"]::-webkit-outer-spin-button,
                 .hero-skin input[type="number"]::-webkit-inner-spin-button{
                   -webkit-appearance: inner-spin-button;
@@ -640,13 +631,19 @@ export default function Table({
                   box-shadow: none !important;
                   margin: 0;
                   width: 16px;
-                  filter: brightness(0); /* שחור */
+                  filter: brightness(0);
                   opacity: 1;
                 }
                 .hero-skin input[type="number"]{ -moz-appearance: textfield; }
+                ./* טקסט שחור לבאדג' מנצח גם בתוך hero-skin */
+.winner-text-force, .winner-text-force * { color:#000 !important; }
 
-                /* טקסט שחור לבאדג' מנצח גם בתוך hero-skin */
-                .winner-text-force, .winner-text-force * { color:#000 !important; }
+/* תפריטים/פאנלים שצריכים טקסט שחור בתוך ה-HERO */
+.hero-exempt, .hero-exempt * {
+  color:#000 !important;
+  font-weight:500 !important;
+}
+
               `}</style>
 
               <div className="flex items-center justify-between">
@@ -658,13 +655,12 @@ export default function Table({
                   <div className="text-xs text-white/80">Seat {hero.seat+1}</div>
                   <div className="flex items-center gap-1">
                     {heroIsDealer && <Chip label="D" title="Dealer" />}
-                    {heroIsSB && <Chip label="SB" title="Small Blind" />}
-                    {heroIsBB && <Chip label="BB" title="Big Blind" />}
+                    {heroIsSB && <Chip label="SB" />}
+                    {heroIsBB && <Chip label="BB" />}
                   </div>
                 </div>
               </div>
 
-              {/* קלפי HERO + WinnerBadge */}
               <div className="mt-2 flex flex-col items-center gap-3">
                 {hero.hole && hero.hole.length > 0 && (
                   <HeroCards hole={hero.hole} compact={heroCompact} />
@@ -695,7 +691,76 @@ export default function Table({
 
 /* ---------- רכיבי משנה ---------- */
 
-// NEW: Live Banner קומפוננטה קטנה לבאנר העלאה
+function HeroMuteMenu() {
+  const [open, setOpen] = React.useState(false);
+  const panelRef = React.useRef<HTMLDivElement | null>(null);
+
+  const [muteTurn, setMuteTurn]   = React.useState<boolean>(sfx.isMuted('turn'));
+  const [muteRaise, setMuteRaise] = React.useState<boolean>(sfx.isMuted('raise'));
+
+  // סגירה בלחיצה בחוץ
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!panelRef.current) return;
+      if (!panelRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener('mousedown', onDown);
+    return () => window.removeEventListener('mousedown', onDown);
+  }, [open]);
+
+  const allMuted = muteTurn && muteRaise;
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="rounded-full border border-white/30 bg-white/15 backdrop-blur px-2.5 py-1 text-sm shadow"
+        title="Sound settings"
+      >
+        {allMuted ? '🔇' : '🔊'}
+      </button>
+
+      {open && (
+        <div
+  ref={panelRef}
+  className="hero-exempt absolute right-0 mt-2 w-48 rounded-xl border border-white/30 bg-white/95 shadow-lg p-2"
+>
+
+          <div className="px-2 py-1 text-xs font-bold uppercase tracking-wide text-black">השתקת צלילים</div>
+
+
+          <label className="flex items-center justify-between gap-2 px-2 py-1">
+            <span className="text-sm text-black">Your Turn</span>
+            <input
+              type="checkbox"
+              checked={muteTurn}
+              onChange={(e) => {
+                const v = e.target.checked;
+                setMuteTurn(v);
+                sfx.setMuted('turn', v);
+              }}
+            />
+          </label>
+
+          <label className="flex items-center justify-between gap-2 px-2 py-1">
+            <span className="text-sm text-black">Raise / All-in</span>
+            <input
+              type="checkbox"
+              checked={muteRaise}
+              onChange={(e) => {
+                const v = e.target.checked;
+                setMuteRaise(v);
+                sfx.setMuted('raise', v);
+              }}
+            />
+          </label>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LiveBanner({ text }: { text: string }) {
   return (
     <div className="pointer-events-none fixed top-3 inset-x-0 z-[70] flex justify-center">
@@ -717,7 +782,6 @@ function Chip({ label, title }:{label:string; title?:string}) {
   );
 }
 
-/* === BoardCards על ה-felt, כולל אפקט המנצח באוברליי === */
 function BoardCards({
   community,
   winOverlay
@@ -787,13 +851,10 @@ function BoardCards({
         const c = community[i];
         const faceKey = `face-${i}-${appearKeys[i]}`;
 
-        // רפאים: הקלף הישן שלא השתתף ביד המנצחת
         const ghosted   = !!winOverlay && phase !== 'idle' && falling.has(i);
         const animateNow= !!winOverlay && phase === 'fall' && falling.has(i);
 
-        // הקלף החדש שנכנס
         const showEnter = winOverlay && (phase==='enter' || phase==='hold') && falling.has(i);
-        // זהב: רק הקלפים שנשארו על הלוח ומשתתפים ביד המנצחת
         const goldBoard = !!winOverlay && phase!=='idle' && used.has(i) && !falling.has(i);
 
         const wrapperClasses = [
@@ -804,7 +865,6 @@ function BoardCards({
           "overflow-visible",
         ].join(" ");
 
-        // הקלף הישן – יעלה למעלה מעט, מעט שקוף ואפור; בלי שום ring
         const ghostStyle: React.CSSProperties | undefined = ghosted ? {
           transform: 'translate3d(0,-45px,0) translateZ(0)',
           filter: 'grayscale(1) brightness(0.9)',
@@ -817,7 +877,6 @@ function BoardCards({
 
         return (
           <div key={i} className={wrapperClasses}>
-            {/* הקלף המקורי בלוח (יהפוך לרפאים אם מוחלף) */}
             <div style={ghostStyle}>
               {c ? (
                 <AnimatedFace key={faceKey} delayMs={delays[i]}>
@@ -830,7 +889,6 @@ function BoardCards({
               )}
             </div>
 
-            {/* הקלף החדש שנכנס – ללא שום ring */}
             {enterCard && (
               <div className="absolute inset-0">
                 <SlideIn>
@@ -846,7 +904,6 @@ function BoardCards({
     </div>
   );
 }
-
 
 function HeroCards({ hole, compact = false }:{ hole: Card[]; compact?: boolean }) {
   const sz = compact ? ['w-[64px] h-[96px]'] : ['w-[80px] h-[120px]'];
