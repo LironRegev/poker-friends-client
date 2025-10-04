@@ -147,7 +147,8 @@ function FlipIn({
     transformStyle: 'preserve-3d',
     backfaceVisibility: 'hidden' as any,
     willChange: 'transform, opacity',
-    width: '100%', height: '100%',
+    width: '100%',
+    height: '100%',
   };
   return <div style={style}>{children}</div>;
 }
@@ -399,7 +400,7 @@ export default function Table({
   const heroCompact = state.stage === 'showdown';
   const heroTurn = hero ? isSeatTurn(hero.seat) : false;
 
-  /* ====== NEW: שילוב היסטוריה + ויזואל בעת העלאה (RAISE/BET) + סאונד ====== */
+  /* ====== NEW: שילוב ויזואל בעת העלאה (RAISE/BET) + סאונד ====== */
   const [liveBanner, setLiveBanner] = useState<null | { text: string; key: number }>(null);
   const [potPulse, setPotPulse] = useState(false);
   const [highlightSeat, setHighlightSeat] = useState<number | null>(null);
@@ -414,10 +415,6 @@ export default function Table({
   const [showMute, setShowMute] = useState(false);
   const [muteTurn, setMuteTurn] = useState<boolean>(false);
   const [muteRaise, setMuteRaise] = useState<boolean>(false);
-
-  // Drawers – Chat / History (מובייל בלבד)
-  const [showChat, setShowChat] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
 
   useEffect(() => {
     // load persisted
@@ -492,38 +489,6 @@ export default function Table({
     try { localStorage.setItem('pf_mute_raise', muteRaise ? '1':'0'); } catch {}
   }, [muteRaise]);
 
-  /* עזר לרינדור לוגים מכל צורה סבירה */
-  const normalizedHistory = useMemo(() => {
-    const raw: any = (state as any).actionLog;
-    if (!Array.isArray(raw)) return [] as { ts:number; text:string }[];
-    return raw.map((r:any) => {
-      if (typeof r === 'string') return { ts: 0, text: r as string };
-      const ts = typeof r?.ts === 'number' ? r.ts : 0;
-      const text = String((r?.text ?? ''));
-      return { ts, text };
-    });
-  }, [state]);
-
-  const normalizedChat = useMemo(() => {
-    const raw: any = (state as any).chatLog;
-    if (!Array.isArray(raw)) return [] as { ts:number; from?:string; text:string }[];
-    return raw.map((r:any) => {
-      if (typeof r === 'string') return { ts: 0, text: r as string };
-      const ts = typeof r?.ts === 'number' ? r.ts : 0;
-      const from = r?.from ? String(r.from) : undefined;
-      const text = String((r?.text ?? ''));
-      return { ts, from, text };
-    });
-  }, [state]);
-
-  /* גלילה אוטומטית לצ'אט */
-  const chatScrollRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (chatScrollRef.current) {
-      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
-    }
-  }, [normalizedChat]);
-
   return (
     <div className="w-full h-full flex flex-col gap-3">
       {/* === CSS קטן להבהוב + אילוצים === */}
@@ -581,22 +546,6 @@ export default function Table({
 
       {/* Live Banner */}
       {liveBanner && <LiveBanner text={liveBanner.text} />}
-
-      {/* פעולות כלליות: Chat / History — מובייל בלבד */}
-      <div className="flex items-center justify-end gap-2 -mb-1 md:hidden">
-        <button
-          className="px-3 py-1.5 rounded-full border border-slate-300 bg-white hover:bg-slate-50 text-sm"
-          onClick={()=>{ setShowChat(v=>!v); setShowHistory(false); }}
-        >
-          Chat
-        </button>
-        <button
-          className="px-3 py-1.5 rounded-full border border-slate-300 bg-white hover:bg-slate-50 text-sm"
-          onClick={()=>{ setShowHistory(v=>!v); setShowChat(false); }}
-        >
-          History
-        </button>
-      </div>
 
       {/* רצועת שחקנים למעלה */}
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
@@ -877,67 +826,6 @@ export default function Table({
                   onReveal={onReveal}
                 />
               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* === Drawer: Chat — מובייל בלבד === */}
-      {showChat && (
-        <div className="fixed inset-0 z-[80] md:hidden">
-          <div className="absolute inset-0 bg-black/30" onClick={()=>setShowChat(false)} />
-          <div className="absolute right-0 top-0 h-full w-[88vw] sm:w-[420px] bg-white shadow-xl border-l border-slate-200 flex flex-col">
-            <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-              <div className="font-semibold">Chat</div>
-              <button
-                className="px-2 py-1 rounded-md border border-slate-300 bg-white hover:bg-slate-50 text-sm"
-                onClick={()=> setShowChat(false)}
-              >
-                סגור
-              </button>
-            </div>
-            <div ref={chatScrollRef} className="p-3 text-sm text-slate-700 overflow-auto grow">
-              {normalizedChat.length === 0 ? (
-                <div className="text-slate-500">אין הודעות עדיין…</div>
-              ) : (
-                <ul className="space-y-1.5">
-                  {normalizedChat.map((m, idx) => (
-                    <li key={idx} className="flex items-start gap-2">
-                      {m.from ? <span className="font-semibold">{m.from}:</span> : null}
-                      <span className="text-slate-700">{m.text}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* === Drawer: History — מובייל בלבד === */}
-      {showHistory && (
-        <div className="fixed inset-0 z-[80] md:hidden">
-          <div className="absolute inset-0 bg-black/30" onClick={()=>setShowHistory(false)} />
-          <div className="absolute left-0 top-0 h-full w-[88vw] sm:w-[420px] bg-white shadow-xl border-r border-slate-200 flex flex-col">
-            <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-              <div className="font-semibold">History</div>
-              <button
-                className="px-2 py-1 rounded-md border border-slate-300 bg-white hover:bg-slate-50 text-sm"
-                onClick={()=> setShowHistory(false)}
-              >
-                סגור
-              </button>
-            </div>
-            <div className="p-3 text-sm text-slate-700 overflow-auto grow">
-              {normalizedHistory.length === 0 ? (
-                <div className="text-slate-500">אין מהלכים עדיין…</div>
-              ) : (
-                <ul className="space-y-1.5">
-                  {normalizedHistory.map((h, idx) => (
-                    <li key={idx}>{h.text}</li>
-                  ))}
-                </ul>
-              )}
             </div>
           </div>
         </div>
