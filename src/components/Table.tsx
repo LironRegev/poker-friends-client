@@ -105,10 +105,7 @@ function BackImg({ className = '' }:{ className?: string }) {
 function AnimatedDeal({
   children,
   delayMs = 0,
-}:{
-  children: React.ReactNode;
-  delayMs?: number;
-}) {
+}:{ children: React.ReactNode; delayMs?: number; }) {
   const [visible, setVisible] = useState(false);
   useEffect(() => {
     setVisible(false);
@@ -130,10 +127,7 @@ function AnimatedDeal({
 function FlipIn({
   children,
   delayMs = 0,
-}:{
-  children: React.ReactNode;
-  delayMs?: number;
-}) {
+}:{ children: React.ReactNode; delayMs?: number; }) {
   const [visible, setVisible] = useState(false);
   useEffect(() => {
     setVisible(false);
@@ -156,10 +150,7 @@ function FlipIn({
 function AnimatedFace({
   children,
   delayMs = 0,
-}:{
-  children: React.ReactNode;
-  delayMs?: number;
-}) {
+}:{ children: React.ReactNode; delayMs?: number; }) {
   const [visible, setVisible] = useState(false);
   useEffect(() => {
     setVisible(false);
@@ -181,10 +172,7 @@ function AnimatedFace({
 function SlideIn({
   children,
   delayMs = 0,
-}:{
-  children: React.ReactNode;
-  delayMs?: number;
-}) {
+}:{ children: React.ReactNode; delayMs?: number; }) {
   const [v, setV] = useState(false);
   useEffect(() => {
     setV(false);
@@ -657,7 +645,7 @@ export default function Table({
       {/* === שולחן === */}
       <div className="mt-1">
         <div className="relative mx-auto w-full max-w-[1100px] md:max-w-[1280px] -mt-2 md:-mt-2 overflow-x-hidden">
-          <div className="relative mx-auto h-[260px] md:aspect-[13/3] md:max-h-[190px] overflow-hidden">
+          <div className="relative mx-auto h-[260px] md:aspect-[13/3] md:max-h-[210px] overflow-hidden md:overflow-visible">
             {/* RAIL — מוסתר במובייל */}
             <div
               className="
@@ -665,6 +653,7 @@ export default function Table({
                 absolute inset-0 rounded-[999px]
                 bg-[conic-gradient(from_210deg_at_50%_50%,#8a6a55_0%,#6e523d_30%,#8a6a55_65%,#5c4636_100%)]
                 shadow-[inset_0_0_0_6px_rgba(0,0,0,0.12),0_10px_22px_rgba(0,0,0,0.22)]
+                z-10
               "
             />
             {/* FELT — מוסתר במובייל */}
@@ -674,21 +663,22 @@ export default function Table({
                 absolute inset-[12px] rounded-[999px]
                 bg-[radial-gradient(ellipse_at_center,#7b604c_0%,#6a5242_45%,#5a463a_85%)]
                 shadow-[inset_0_0_36px_rgba(0,0,0,0.22)]
+                z-10
               "
             />
             {/* טבעת — מוסתרת במובייל */}
-            <div className="hidden md:block absolute inset-[12px] rounded-[999px] ring-1 ring-black/10 pointer-events-none" />
+            <div className="hidden md:block absolute inset-[12px] rounded-[999px] ring-1 ring-black/10 pointer-events-none z-10" />
 
             {/* POT overlay */}
-            + <div className="absolute left-5 top-3 md:left-96 md:top-2 z-20 pointer-events-none select-none">
+            <div className="absolute left-5 top-3 md:left-96 md:top-2 z-40 pointer-events-none select-none">
               <div className={`flex items-baseline gap-2 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.65)] transition-all duration-500 ${potPulse ? 'ring-2 ring-amber-300 rounded-full px-2 scale-105' : ''}`}>
                 <span className="font-bold">Pot</span>
                 <span className="font-extrabold">{currency}{state.pot}</span>
               </div>
             </div>
 
-            {/* אזור הקלפים — מוזז מעט שמאלה במובייל */}
-             <div className="absolute inset-[12px] rounded-[999px] grid place-items-center z-10 overflow-visible">
+            {/* אזור הקלפים */}
+            <div className="absolute inset-[12px] rounded-[999px] grid place-items-center z-20 md:z-30 overflow-visible">
               <BoardCards community={state.community} winOverlay={winOverlay} />
             </div>
           </div>
@@ -701,7 +691,7 @@ export default function Table({
 
       {/* HERO + Controls + WinnerBadge — מרונדר רק כשלא במצב חשיפה */}
       {hero && !minHero && (
-        <div className={`sticky bottom-0 ${heroCompact ? 'pt-1.5' : 'pt-3'} bg-gradient-to-t from-slate-50 via-slate-50/90 to-transparent`}>
+        <div className={`sticky bottom-0 ${heroCompact ? 'pt-1.5' : 'pt-3'} bg-gradient-to-t from-slate-50 via-slate-50/90 to-transparent z-[60]`}>
           <div className={heroTurn ? 'turn-outline' : ''}>
             <div
               className={[
@@ -829,7 +819,7 @@ export default function Table({
                   <div className="flex items-center gap-1">
                     {heroIsDealer && <Chip label="D" title="Dealer" />}
                     {heroIsSB && <Chip label="SB" title="Small Blind" />}
-                    {heroIsBB && <Chip label="BB" title="Big Blind" />}
+                    {heroIsBB && <Chip label="BB" />}
                   </div>
                 </div>
               </div>
@@ -896,6 +886,19 @@ function Chip({ label, title }:{label:string; title?:string}) {
   );
 }
 
+/* ===== Helper: זיהוי דסקטופ ===== */
+function useIsDesktop() {
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)');
+    const update = () => setIsDesktop(mq.matches);
+    update();
+    mq.addEventListener?.('change', update);
+    return () => mq.removeEventListener?.('change', update);
+  }, []);
+  return isDesktop;
+}
+
 /* === BoardCards על ה-felt, כולל אפקט המנצח באוברליי === */
 function BoardCards({
   community,
@@ -914,6 +917,9 @@ function BoardCards({
   const [appearKeys, setAppearKeys] = useState<number[]>([0,0,0,0,0]);
   const prevLenRef = useRef(0);
   const [delays, setDelays] = useState<number[]>([0,0,0,0,0]);
+
+  const isDesktop = useIsDesktop();
+  const ghostY = isDesktop ? -43 : -45; // <<< במובייל נשאר גבוה, בדסקטופ עדין כדי שלא ייחתך
 
   useEffect(() => {
     setAppearKeys(prev => {
@@ -974,14 +980,14 @@ function BoardCards({
 
         const wrapperClasses = [
           "relative",
-          "w-[68px] h-[102px] md:w-[80px] md:h-[120px]",
+          "w-[68px] h-[102px] md:w-[80px] md:h-[124px]", // md: 124px במקום 120px
           "rounded-[0.3rem]",
           goldBoard ? "ring-2 ring-amber-400 ring-offset-[3px] ring-offset-[#5a463a]" : "",
           "overflow-visible",
         ].join(" ");
 
         const ghostStyle: React.CSSProperties | undefined = ghosted ? {
-          transform: 'translate3d(0,-45px,0) translateZ(0)',
+          transform: `translate3d(0,${ghostY}px,0) translateZ(0)`,
           filter: 'grayscale(1) brightness(0.9)',
           opacity: 0.45,
           transition: animateNow ? 'transform 320ms ease, filter 320ms ease, opacity 320ms ease' : undefined,
