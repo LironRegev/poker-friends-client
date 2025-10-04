@@ -1,5 +1,35 @@
 @import "tailwindcss";
+
 html, body, #root {
   height: 100%;
-  overflow: hidden; /* בלי גלילה של העמוד */
+  overflow: hidden; /* בלי גלילה של העמוד בדסקטופ */
+}
+
+/* התאמות מובייל */
+* { -webkit-tap-highlight-color: transparent; }
+:root { --safe-bottom: env(safe-area-inset-bottom, 0px); }
+
+@media (max-width: 640px) {
+  html, body, #root {
+    overflow: visible; /* כן לאפשר גלילה במובייל */
+  }
+
+  .mobile-safe-pad {
+    padding-bottom: calc(64px + var(--safe-bottom)); /* מקום ל-HUD */
+  }
+
+  .mobile-bottom-bar {
+    height: calc(56px + var(--safe-bottom));
+    padding-bottom: var(--safe-bottom);
+  }
+
+  .mobile-scroll {
+    -webkit-overflow-scrolling: touch;
+    overflow: auto;
+  }
+
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
 }

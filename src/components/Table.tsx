@@ -2,6 +2,7 @@ import React, { useMemo, useEffect, useRef, useState } from 'react';
 import Controls from './Controls';
 import { emitShowCards, emitMuckCards } from '../api/socket';
 import WinnerBadge from './WinnerBadge';
+import MobileHUD from './MobileHUD';
 
 type Card = { rank:number; suit:'♣'|'♦'|'♥'|'♠' };
 type Player = {
@@ -778,6 +779,17 @@ export default function Table({
           </div>
         </div>
       )}
+
+      {/* === Mobile HUD (מופיע רק במסכים קטנים) === */}
+      <div className="md:hidden">
+        <MobileHUD
+          state={state}
+          me={me}
+          onAction={onAction}
+          onReveal={onReveal}
+          isHeroTurn={heroTurn}
+        />
+      </div>
     </div>
   );
 }
