@@ -413,14 +413,27 @@ export default function Table({
   const [muteTurn, setMuteTurn] = useState<boolean>(false);
   const [muteRaise, setMuteRaise] = useState<boolean>(false);
 
-  // מובייל: חשיפה בגלילה — כיווץ HERO זמני
+  // מובייל: חשיפה בגלילה — מעלימים את ה-HERO לגמרי, ומגלגלים לעוגן
   const [minHero, setMinHero] = useState(false);
   const openExtras = () => {
     setMinHero(true);
-    const el = document.getElementById('extras');
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // לגלול אחרי שה-DOM עודכן
+    setTimeout(() => {
+      const el = document.getElementById('extras');
+      if (el) {
+        const y = el.getBoundingClientRect().top + window.scrollY - 12;
+        window.scrollTo({ top: y, behavior: 'smooth' });
+      }
+    }, 30);
   };
-  const closeExtras = () => setMinHero(false);
+  const closeExtras = () => {
+    setMinHero(false);
+    // לחזור למטה בעדינות
+    setTimeout(() => {
+      const y = document.body.scrollHeight;
+      window.scrollTo({ top: y, behavior: 'smooth' });
+    }, 30);
+  };
 
   useEffect(() => {
     try {
@@ -548,15 +561,17 @@ export default function Table({
       {/* Live Banner */}
       {liveBanner && <LiveBanner text={liveBanner.text} />}
 
-      {/* פעולות כלליות — מובייל: חשיפת הפאנלים בגלילה */}
+      {/* מובייל: כפתור לחשוף פאנלים בגלילה */}
       <div className="flex items-center justify-end gap-2 -mb-1 md:hidden">
-        <button
-          className="px-3 py-1.5 rounded-full border border-slate-300 bg-white hover:bg-slate-50 text-sm"
-          onClick={openExtras}
-          title="גלול לצ׳אט ולהיסטוריית מהלכים"
-        >
-          חשוף צ׳אט/היסטוריה
-        </button>
+        {!minHero && (
+          <button
+            className="px-3 py-1.5 rounded-full border border-slate-300 bg-white hover:bg-slate-50 text-sm"
+            onClick={openExtras}
+            title="גלול לצ׳אט ולהיסטוריית מהלכים"
+          >
+            חשוף צ׳אט/היסטוריה
+          </button>
+        )}
       </div>
 
       {/* רצועת שחקנים למעלה */}
@@ -683,15 +698,14 @@ export default function Table({
         ) : null}
       </div>
 
-      {/* HERO + Controls + WinnerBadge */}
-      {hero && (
-        <div className={`sticky ${minHero ? 'bottom-auto' : 'bottom-0'} ${heroCompact ? 'pt-1.5' : 'pt-3'} bg-gradient-to-t from-slate-50 via-slate-50/90 to-transparent`}>
+      {/* HERO + Controls + WinnerBadge — מרונדר רק כשלא במצב חשיפה */}
+      {hero && !minHero && (
+        <div className={`sticky bottom-0 ${heroCompact ? 'pt-1.5' : 'pt-3'} bg-gradient-to-t from-slate-50 via-slate-50/90 to-transparent`}>
           <div className={heroTurn ? 'turn-outline' : ''}>
             <div
               className={[
                 'relative',
                 'rounded-2xl hero-skin hero-felt',
-                minHero ? 'max-h-[56px] overflow-hidden transition-all duration-300' : '',
                 isSeatWinner(hero.seat)
                   ? (heroCompact ? 'border-2 border-amber-500 bg-amber-50 p-3' : 'border-2 border-amber-500 bg-amber-50 p-5')
                   : !hero.inHand
@@ -702,19 +716,6 @@ export default function Table({
                 (highlightSeat === hero.seat) ? 'outline outline-4 outline-amber-300/70 shadow-lg' : ''
               ].join(' ')}
             >
-              {/* כפתור החזרת ה-HERO במצב מכווץ — מובייל בלבד */}
-              {minHero && (
-                <div className="md:hidden absolute left-3 top-3 z-50">
-                  <button
-                    className="px-2 py-1 rounded-md border border-white/60 bg-white/15 hover:bg-white/25 transition text-white text-sm"
-                    onClick={closeExtras}
-                    title="סגור תצוגה מורחבת"
-                  >
-                    החזר את ה־HERO
-                  </button>
-                </div>
-              )}
-
               {/* HERO styles */}
               <style>{`
                 .hero-felt{
@@ -855,6 +856,17 @@ export default function Table({
             </div>
           </div>
         </div>
+      )}
+
+      {/* כפתור קבוע במובייל להחזיר את ה-HERO כשמצב חשיפה פעיל */}
+      {minHero && (
+        <button
+          className="md:hidden fixed bottom-4 right-4 z-[90] px-3 py-2 rounded-full border border-slate-300 bg-white/95 shadow"
+          onClick={closeExtras}
+          title="החזר את ה-HERO"
+        >
+          החזר את ה-HERO
+        </button>
       )}
     </div>
   );
