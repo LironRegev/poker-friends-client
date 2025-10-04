@@ -13,65 +13,30 @@ type Player = {
   isOwner?: boolean; holeCount?: number; hole?: Card[]; publicHole?: Card[];
 };
 type Stage = 'waiting'|'preflop'|'flop'|'turn'|'river'|'showdown';
-
 type WinnerInfo = {
   seat: number; name: string; amount: number; category: number | null; categoryName: string;
 };
-
 type State = {
-  code: string;
-  stage: Stage;
-  players: Player[];
-  dealerSeat: number;
-  smallBlind: number;
-  bigBlind: number;
-  currentBet: number;
-  minRaise: number;
-  pot: number;
-  community: Card[];
-  turnSeat: number;
-  lastAggressorSeat: number | null;
-  message?: string;
-
-  // חדשים להגדרות חדר
-  currency?: string;
-  buyInMin?: number;
-  buyInDefault?: number;
-
-  revealSeats?: number[];     // מי יכול לבצע Show/Muck
-  lastWinners?: WinnerInfo[]; // תצוגת מנצחים ליד ה-HERO
-  actionLog?: { ts:number; text:string }[]; // יומן מהשרת
+  code: string; stage: Stage; players: Player[]; dealerSeat: number;
+  smallBlind: number; bigBlind: number; currentBet: number; minRaise: number;
+  pot: number; community: Card[]; turnSeat: number; lastAggressorSeat: number | null;
+  message?: string; currency?: string; buyInMin?: number; buyInDefault?: number;
+  revealSeats?: number[]; lastWinners?: WinnerInfo[]; actionLog?: { ts:number; text:string }[];
 };
-
 type RoomSettings = {
-  smallBlind: number;
-  bigBlind: number;
-  buyInMin: number;
-  buyInDefault: number;
-  currency: string;
+  smallBlind: number; bigBlind: number; buyInMin: number; buyInDefault: number; currency: string;
 };
 
-export default function App(){
-  const socket = useMemo(()=>getSocket(),[]);
-  const [me, setMe]   = useState<{name:string; stack:number}>({name:'', stack:1000});
+export default function App() {
+  const socket = useMemo(() => getSocket(), []);
+  const [me, setMe] = useState<{ name: string; stack: number }>({ name: '', stack: 1000 });
   const [code, setCode] = useState('');
   const [state, setState] = useState<State | null>(null);
-  const [chat, setChat]   = useState<{name:string;text:string;ts:number}[]>([]);
-
-  // הזנת ActivityFeed מהשרת
+  const [chat, setChat] = useState<{ name: string; text: string; ts: number }[]>([]);
   const [feed, setFeed] = useState<FeedItem[]>([]);
+  const [mobileReveal, setMobileReveal] = useState(false);
   const prevStateRef = useRef<State | null>(null);
 
-  // === חדש: רפרנס ל-extras + פתיחה בלחיצה אחת ===
-  const extrasRef = useRef<HTMLDivElement | null>(null);
-  const openExtrasOnce = () => {
-    // מגלגל בעדינות אל אזור ה-extras (צ׳אט/היסטוריה) — קליק אחד.
-    requestAnimationFrame(() => {
-      extrasRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-  };
-
-  // עוזר: בקשה ל-state פרטי מהשרת
   function requestPrivateState(roomCode?: string, fallback?: State) {
     const c = roomCode || code;
     if (!c) { if (fallback) setState(fallback); return; }
@@ -85,31 +50,20 @@ export default function App(){
     const onState = (s: State) => {
       socket.emit('getState', { code: s.code }, (res: any) => {
         const ns: State = (res?.state as State) ?? s;
-
-        // מזינים את ה-ActivityFeed מהשרת (actionLog)
         if (Array.isArray(ns.actionLog)) {
           const mapped: FeedItem[] = ns.actionLog.map(i => ({ ts: i.ts, text: i.text }));
           setFeed(mapped);
         }
-
         setState(ns);
         prevStateRef.current = ns;
       });
     };
-
-    const onChat  = (m: { name: string; text: string; ts: number }) => {
-      setChat(prev => [...prev, m]);
-    };
-
-    const onConnect = () => { 
-      if (code) requestPrivateState(code, state || undefined);
-    };
-
+    const onChat = (m: { name: string; text: string; ts: number }) => setChat(prev => [...prev, m]);
+    const onConnect = () => { if (code) requestPrivateState(code, state || undefined); };
     socket.on('state', onState);
     socket.on('chat', onChat);
     socket.on('connect', onConnect);
     socket.on('reconnect', onConnect as any);
-
     return () => {
       socket.off('state', onState);
       socket.off('chat', onChat);
@@ -118,32 +72,22 @@ export default function App(){
     };
   }, [socket, code, state]);
 
-  // יצירת חדר
   function onCreateRoom(settings: RoomSettings) {
     setMe(prev => ({ ...prev, stack: settings.buyInDefault }));
-    socket.emit(
-      'createRoom',
-      {
-        name: me.name,
-        stack: settings.buyInDefault,
-        smallBlind: settings.smallBlind,
-        bigBlind: settings.bigBlind,
-        buyInMin: settings.buyInMin,
-        buyInDefault: settings.buyInDefault,
-        currency: settings.currency || '₪',
-      },
-      (res:any)=>{
-        if (res?.error) return alert(res.error);
-        setCode(res.code);
-        setState(res.state);
-        requestPrivateState(res.code, res.state);
-      }
-    );
+    socket.emit('createRoom', {
+      name: me.name, stack: settings.buyInDefault,
+      smallBlind: settings.smallBlind, bigBlind: settings.bigBlind,
+      buyInMin: settings.buyInMin, buyInDefault: settings.buyInDefault,
+      currency: settings.currency || '₪',
+    }, (res: any) => {
+      if (res?.error) return alert(res.error);
+      setCode(res.code); setState(res.state);
+      requestPrivateState(res.code, res.state);
+    });
   }
 
-  // הצטרפות
   function onJoinRoom(desiredStack: number) {
-    socket.emit('joinRoom', { code, name: me.name, stack: desiredStack }, (res:any)=>{
+    socket.emit('joinRoom', { code, name: me.name, stack: desiredStack }, (res: any) => {
       if (res?.error) return alert(res.error);
       setMe(prev => ({ ...prev, stack: desiredStack }));
       setState(res.state);
@@ -158,52 +102,33 @@ export default function App(){
     setFeed([]);
   }
 
-  function sendChat(text:string){
+  function sendChat(text: string) {
     socket.emit('chat', { code, text, name: me.name || 'Player' });
   }
 
-  /* ============================
-     רקע “רצפת קזינו” — עדין
-     ============================ */
-  const carpetTileSvg =
-    `<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300' viewBox='0 0 300 300'>
-      <defs>
-        <radialGradient id='bg' cx='50%' cy='50%' r='65%'>
-          <stop offset='0%' stop-color='#2b1411'/>
-          <stop offset='100%' stop-color='#1e100e'/>
-        </radialGradient>
-      </defs>
-      <rect width='100%' height='100%' fill='url(#bg)'/>
-    </svg>`.replace(/\s+/g, ' ');
+  const carpetTileSvg = `<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300' viewBox='0 0 300 300'>
+    <defs><radialGradient id='bg' cx='50%' cy='50%' r='65%'>
+    <stop offset='0%' stop-color='#2b1411'/><stop offset='100%' stop-color='#1e100e'/>
+    </radialGradient></defs>
+    <rect width='100%' height='100%' fill='url(#bg)'/></svg>`.replace(/\s+/g, ' ');
   const carpetDataUri = `url("data:image/svg+xml;utf8,${encodeURIComponent(carpetTileSvg)}")`;
-
-  const casinoFloorStyle: React.CSSProperties = {
-    backgroundColor: '#211210',
-    backgroundImage: carpetDataUri
-  };
+  const casinoFloorStyle: React.CSSProperties = { backgroundImage: carpetDataUri, backgroundColor: '#211210' };
 
   if (!state) {
     return (
       <>
-        <div className="fixed inset-0 -z-10 pointer-events-none" style={casinoFloorStyle} />
-        <Lobby
-          me={me}
-          setMe={setMe}
-          code={code}
-          setCode={setCode}
-          onCreateRoom={onCreateRoom}
-          onJoinRoom={onJoinRoom}
-        />
+        <div className="fixed inset-0 -z-10" style={casinoFloorStyle} />
+        <Lobby me={me} setMe={setMe} code={code} setCode={setCode} onCreateRoom={onCreateRoom} onJoinRoom={onJoinRoom} />
       </>
     );
   }
 
   return (
     <div className="h-screen">
-      {/* שכבות רצפה מאחור */}
-      <div className="fixed inset-0 -z-10 pointer-events-none" style={casinoFloorStyle} />
+      <div className="fixed inset-0 -z-10" style={casinoFloorStyle} />
 
-      <div className="h-full grid gap-3 md:grid-cols-[1fr_300px] px-4 md:px-6 pt-4">
+      {/* תוכן ראשי – מוסתר בזמן פתיחת הצ'אט במובייל */}
+      <div className={`h-full grid gap-3 md:grid-cols-[1fr_300px] px-4 md:px-6 pt-4 transition-opacity duration-300 ${mobileReveal ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
         {/* שמאל: המשחק */}
         <div className="h-full flex flex-col min-h-0">
           <RoomHeader
@@ -217,44 +142,63 @@ export default function App(){
             <Table
               state={state}
               me={me}
-              onAction={(kind, amount) =>
-                socket.emit('action', { code, kind, amount })
-              }
+              onAction={(kind, amount) => socket.emit('action', { code, kind, amount })}
             />
           </div>
 
-          {/* כפתור חשיפה — מובייל: קליק אחד גולל ל-extras */}
+          {/* כפתור פתיחת צ'אט/היסטוריה במובייל */}
           <div className="md:hidden flex justify-center mt-2 mb-3">
             <button
               className="px-4 py-2 rounded-full bg-white border border-slate-300 shadow text-sm font-medium"
-              onClick={openExtrasOnce}
+              onClick={() => setMobileReveal(true)}
             >
               חשוף צ׳אט/היסטוריה
             </button>
           </div>
         </div>
 
-        {/* ימין: צ'אט + יומן פעולות — גלוי גם במובייל כדי שיהיה למה לגלול */}
-        <div
-          id="extras"
-          ref={extrasRef}
-          className="block md:flex h-full min-h-0 overflow-hidden flex-col gap-3 mt-4 md:mt-0 scroll-mt-24"
-        >
-          {/* צ׳אט: גובה קבוע במובייל + גלילה פנימית */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-2 overflow-hidden">
-            <div className="h-[42vh] md:h-auto md:max-h-none overflow-y-auto">
-              <Chat chat={chat} onSend={sendChat} />
-            </div>
+        {/* צד ימין לדסקטופ בלבד */}
+        <div className="hidden md:flex h-full min-h-0 overflow-hidden flex-col gap-3">
+          <div className="flex-1 min-h-[200px] rounded-2xl border border-slate-200 bg-white p-2 overflow-y-auto">
+            <Chat chat={chat} onSend={sendChat} />
           </div>
-
-          {/* היסטוריה */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-2 overflow-hidden">
-            <div className="h-[28vh] md:h-auto md:max-h-none overflow-y-auto">
-              <ActivityFeed items={feed} />
-            </div>
+          <div className="flex-1 min-h-[200px]">
+            <ActivityFeed items={feed} />
           </div>
         </div>
       </div>
+
+      {/* Mobile overlay — נפתח רק בלחיצה העליונה */}
+      {mobileReveal && (
+        <div className="md:hidden fixed inset-0 z-[90]">
+          <div className="absolute inset-0 bg-black/35" onClick={() => setMobileReveal(false)} />
+          <div className="absolute bottom-3 left-3 right-3 rounded-2xl border border-slate-200 bg-white shadow-xl">
+            <div className="px-4 py-2 border-b border-slate-200 flex items-center justify-between">
+              <div className="font-semibold">צ׳אט / היסטוריה</div>
+              <button
+                className="px-2 py-1 rounded-md border border-slate-300 bg-white hover:bg-slate-50 text-sm"
+                onClick={() => setMobileReveal(false)}
+              >
+                סגור
+              </button>
+            </div>
+            <div className="p-3 pt-3">
+              <div className="h-[78vh] grid grid-rows-[3fr_2fr] gap-3">
+                <section className="rounded-xl border border-slate-200 overflow-hidden">
+                  <div className="h-full overflow-y-auto p-2">
+                    <Chat chat={chat} onSend={sendChat} />
+                  </div>
+                </section>
+                <section className="rounded-xl border border-slate-200 overflow-hidden">
+                  <div className="h-full overflow-y-auto p-2">
+                    <ActivityFeed items={feed} />
+                  </div>
+                </section>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
