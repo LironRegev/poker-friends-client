@@ -33,13 +33,11 @@ html, body, #root {
     min-width: 44px;
   }
 
-  /* חוסם אגרסיבי של כל צ'אט/היסטוריה ישנים במובייל כאשר הגוף מסומן */
-  .pf-mobile-clean [id*="chat"],
-  .pf-mobile-clean [class*="chat"],
-  .pf-mobile-clean [id*="history"],
-  .pf-mobile-clean [class*="history"],
-  .pf-mobile-clean [data-chat],
-  .pf-mobile-clean [data-history] {
+  /* חוסם כל פאנל צ'אט/היסטוריה ישן שמופיע מאחורי ה-HERO במובייל */
+  /* (מכסה שמות/איידיז נפוצים כדי לוודא היעלמות מוחלטת במובייל) */
+  #chat, #chat-panel, #mobile-chat, .chat, .chat-panel,
+  #history, #history-panel, #mobile-history, .history, .history-panel,
+  [data-chat], [data-history] {
     display: none !important;
   }
 }
