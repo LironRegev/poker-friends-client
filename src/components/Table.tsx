@@ -1,6 +1,6 @@
 import React, { useMemo, useEffect, useRef, useState } from 'react';
 import Controls from './Controls';
-import { emitShowCards, emitMuckCards } from '../api/socket';
+import { emitShowCards, emitMuckCards, getSocket } from '../api/socket';
 import WinnerBadge from './WinnerBadge';
 // import MobileHUD from './MobileHUD'; // הוסר לפי בקשתך
 
@@ -16,6 +16,7 @@ type WinnerInfo = {
   seat: number; name: string; amount: number; category: number | null; categoryName: string;
 };
 
+type ChatItem = { from: string; text: string; ts: number };
 type State = {
   code: string;
   stage: Stage;
@@ -33,11 +34,10 @@ type State = {
   currency?: string;
   revealSeats?: number[];
   lastWinners?: WinnerInfo[];
+  /** אופציונלי: אם הצד שרת כבר מספק לוגים */
+  chatLog?: ChatItem[];
+  actionLog?: string[];
 };
-
-/* === טיפוסים לנתוני Chat/History (למגירות החדשות) === */
-type ChatMessage = { id: string; from: string; text: string; ts: number };
-type HistoryItem = { id: string; text: string; ts: number };
 
 /* ---------- תמונות ---------- */
 const CARD_DIR = '/cards';
@@ -303,14 +303,10 @@ export default function Table({
   state,
   me,
   onAction,
-  chatMessages = [],
-  handHistory = [],
 }:{
   state: State;
   me: { name: string; stack: number };
   onAction: (kind:'fold'|'check'|'call'|'bet'|'raise', amount?:number)=>void;
-  chatMessages?: ChatMessage[];   // נתוני צ'אט חיים
-  handHistory?: HistoryItem[];    // היסטוריית מהלכים חיה
 }) {
   const hero = useMemo(()=>{
     return (state.players as any[]).find(p => p.hole)
@@ -419,9 +415,38 @@ export default function Table({
   const [muteTurn, setMuteTurn] = useState<boolean>(false);
   const [muteRaise, setMuteRaise] = useState<boolean>(false);
 
-  // Drawers – Chat / History
+  // Drawers – Chat / History (מובייל בלבד)
   const [showChat, setShowChat] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+
+  // תוכן לצ'אט/היסטוריה
+  const [chatLog, setChatLog] = useState<ChatItem[]>(() => state.chatLog ?? []);
+  const [actionLog, setActionLog] = useState<string[]>(() => state.actionLog ?? []);
+
+  useEffect(() => { if (state.chatLog) setChatLog(state.chatLog); }, [state.chatLog]);
+  useEffect(() => { if (state.actionLog) setActionLog(state.actionLog); }, [state.actionLog]);
+
+  // מאזינים ל־socket (אם זמינים) כדי לעדכן בזמן אמת
+  useEffect(() => {
+    const sock = getSocket?.();
+    if (!sock) return;
+
+    const onChat = (msg: { from: string; text: string; ts?: number }) => {
+      setChatLog(prev => [...prev, { from: msg.from, text: msg.text, ts: msg.ts ?? Date.now() }]);
+    };
+    const onHist = (entry: string) => {
+      setActionLog(prev => [...prev, entry]);
+    };
+
+    // שים לב: שנה לשמות האירועים בפועל אצלך אם צריך
+    sock.on?.('chat:message', onChat);
+    sock.on?.('history:action', onHist);
+
+    return () => {
+      sock.off?.('chat:message', onChat);
+      sock.off?.('history:action', onHist);
+    };
+  }, []);
 
   useEffect(() => {
     // load persisted
@@ -475,7 +500,7 @@ export default function Table({
       setLiveBanner({ text: txt, key: Date.now() });
       setPotPulse(true);
       setHighlightSeat(state.lastAggressorSeat);
-      playRaise(); // << סאונד צ'יפים על רייז/אול-אין
+      playRaise();
 
       window.setTimeout(() => setPotPulse(false), 650);
       window.setTimeout(() => setHighlightSeat(null), 900);
@@ -554,8 +579,8 @@ export default function Table({
       {/* Live Banner */}
       {liveBanner && <LiveBanner text={liveBanner.text} />}
 
-      {/* פעולות כלליות: Chat / History */}
-      <div className="flex items-center justify-end gap-2 -mb-1">
+      {/* פעולות כלליות: Chat / History — מובייל בלבד */}
+      <div className="flex items-center justify-end gap-2 -mb-1 md:hidden">
         <button
           className="px-3 py-1.5 rounded-full border border-slate-300 bg-white hover:bg-slate-50 text-sm"
           onClick={()=>{ setShowChat(v=>!v); setShowHistory(false); }}
@@ -700,7 +725,7 @@ export default function Table({
           <div className={heroTurn ? 'turn-outline' : ''}>
             <div
               className={[
-                'relative', // חשוב: לעיגון כפתור ה-Mute כמוחלט
+                'relative',
                 'rounded-2xl hero-skin hero-felt',
                 isSeatWinner(hero.seat)
                   ? (heroCompact ? 'border-2 border-amber-500 bg-amber-50 p-3' : 'border-2 border-amber-500 bg-amber-50 p-5')
@@ -854,9 +879,9 @@ export default function Table({
         </div>
       )}
 
-      {/* === Drawer: Chat === */}
+      {/* === Drawer: Chat — מובייל בלבד === */}
       {showChat && (
-        <div className="fixed inset-0 z-[80]">
+        <div className="fixed inset-0 z-[80] md:hidden">
           <div className="absolute inset-0 bg-black/30" onClick={()=>setShowChat(false)} />
           <div className="absolute right-0 top-0 h-full w-[88vw] sm:w-[420px] bg-white shadow-xl border-l border-slate-200 flex flex-col">
             <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
@@ -868,16 +893,23 @@ export default function Table({
                 סגור
               </button>
             </div>
-            <div className="p-3 text-sm text-slate-700 overflow-auto grow">
-              <ChatPanel messages={chatMessages} />
+            <div className="p-3 text-sm text-slate-700 overflow-auto grow space-y-2">
+              {chatLog.length === 0 ? (
+                <div className="text-slate-400">אין הודעות עדיין…</div>
+              ) : chatLog.map((m, idx) => (
+                <div key={idx} className="flex gap-2">
+                  <span className="font-semibold">{m.from}:</span>
+                  <span>{m.text}</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>
       )}
 
-      {/* === Drawer: History === */}
+      {/* === Drawer: History — מובייל בלבד === */}
       {showHistory && (
-        <div className="fixed inset-0 z-[80]">
+        <div className="fixed inset-0 z-[80] md:hidden">
           <div className="absolute inset-0 bg-black/30" onClick={()=>setShowHistory(false)} />
           <div className="absolute left-0 top-0 h-full w-[88vw] sm:w-[420px] bg-white shadow-xl border-r border-slate-200 flex flex-col">
             <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
@@ -889,8 +921,12 @@ export default function Table({
                 סגור
               </button>
             </div>
-            <div className="p-3 text-sm text-slate-700 overflow-auto grow">
-              <HistoryPanel items={handHistory} />
+            <div className="p-3 text-sm text-slate-700 overflow-auto grow space-y-2">
+              {actionLog.length === 0 ? (
+                <div className="text-slate-400">אין מהלכים עדיין…</div>
+              ) : actionLog.map((line, i) => (
+                <div key={i}>• {line}</div>
+              ))}
             </div>
           </div>
         </div>
@@ -1070,50 +1106,6 @@ function HeroCards({ hole, compact = false }:{ hole: Card[]; compact?: boolean }
           </div>
         );
       })}
-    </div>
-  );
-}
-
-/* === Panels עבור Chat/History (למגירות) === */
-function ChatPanel({messages}:{messages: ChatMessage[]}) {
-  const boxRef = useRef<HTMLDivElement>(null);
-  useEffect(()=>{ boxRef.current?.scrollTo({ top: boxRef.current.scrollHeight }); }, [messages]);
-  return (
-    <div ref={boxRef} className="max-h-[calc(100vh-160px)] overflow-auto">
-      {messages.length === 0 ? (
-        <div className="text-sm text-slate-500">אין הודעות עדיין.</div>
-      ) : (
-        <ul className="space-y-2">
-          {messages.map(m=>(
-            <li key={m.id} className="text-sm">
-              <span className="font-semibold">{m.from}:</span>{' '}
-              <span>{m.text}</span>
-              <span className="ml-2 text-[11px] text-slate-500">{new Date(m.ts).toLocaleTimeString()}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function HistoryPanel({items}:{items: HistoryItem[]}) {
-  const boxRef = useRef<HTMLDivElement>(null);
-  useEffect(()=>{ boxRef.current?.scrollTo({ top: boxRef.current.scrollHeight }); }, [items]);
-  return (
-    <div ref={boxRef} className="max-h-[calc(100vh-160px)] overflow-auto">
-      {items.length === 0 ? (
-        <div className="text-sm text-slate-500">אין מהלכים עדיין.</div>
-      ) : (
-        <ol className="space-y-1 list-decimal list-inside text-sm">
-          {items.map(it=>(
-            <li key={it.id}>
-              <span>{it.text}</span>
-              <span className="ml-2 text-[11px] text-slate-500">{new Date(it.ts).toLocaleTimeString()}</span>
-            </li>
-          ))}
-        </ol>
-      )}
     </div>
   );
 }
