@@ -680,7 +680,7 @@ export default function Table({
             <div className="hidden md:block absolute inset-[12px] rounded-[999px] ring-1 ring-black/10 pointer-events-none" />
 
             {/* POT overlay */}
-            <div className="absolute left-5 top-3 md:left-96 md:top-2 z-10 pointer-events-none select-none">
+            + <div className="absolute left-5 top-3 md:left-96 md:top-2 z-20 pointer-events-none select-none">
               <div className={`flex items-baseline gap-2 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.65)] transition-all duration-500 ${potPulse ? 'ring-2 ring-amber-300 rounded-full px-2 scale-105' : ''}`}>
                 <span className="font-bold">Pot</span>
                 <span className="font-extrabold">{currency}{state.pot}</span>
@@ -688,7 +688,7 @@ export default function Table({
             </div>
 
             {/* אזור הקלפים — מוזז מעט שמאלה במובייל */}
-             <div className="absolute inset-x-[12px] inset-y-0 rounded-[999px] grid place-items-center">
+             <div className="absolute inset-[12px] rounded-[999px] grid place-items-center z-10 overflow-visible">
               <BoardCards community={state.community} winOverlay={winOverlay} />
             </div>
           </div>
