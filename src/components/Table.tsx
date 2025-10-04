@@ -1,6 +1,6 @@
 import React, { useMemo, useEffect, useRef, useState } from 'react';
 import Controls from './Controls';
-import { emitShowCards, emitMuckCards, getSocket } from '../api/socket';
+import { emitShowCards, emitMuckCards } from '../api/socket';
 import WinnerBadge from './WinnerBadge';
 // import MobileHUD from './MobileHUD'; // הוסר לפי בקשתך
 
@@ -15,9 +15,6 @@ type Stage = 'waiting'|'preflop'|'flop'|'turn'|'river'|'showdown';
 type WinnerInfo = {
   seat: number; name: string; amount: number; category: number | null; categoryName: string;
 };
-
-type ChatItem = { from: string; text: string; ts: number };
-type ActionLogItem = string | { ts: number; text: string };
 
 type State = {
   code: string;
@@ -36,9 +33,10 @@ type State = {
   currency?: string;
   revealSeats?: number[];
   lastWinners?: WinnerInfo[];
-  /** אופציונלי: אם הצד שרת כבר מספק לוגים */
-  chatLog?: ChatItem[];
-  actionLog?: ActionLogItem[];
+
+  /* אופציונלי: מקורות לדראורים החדשים (נתמוך בכל צורה נפוצה) */
+  actionLog?: Array<string | { ts:number; text:string }>;
+  chatLog?: Array<string | { ts?:number; from?:string; text:string }>;
 };
 
 /* ---------- תמונות ---------- */
@@ -421,35 +419,6 @@ export default function Table({
   const [showChat, setShowChat] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
 
-  // תוכן לצ'אט/היסטוריה
-  const [chatLog, setChatLog] = useState<ChatItem[]>(() => state.chatLog ?? []);
-  const [actionLog, setActionLog] = useState<ActionLogItem[]>(() => state.actionLog ?? []);
-
-  useEffect(() => { if (state.chatLog) setChatLog(state.chatLog); }, [state.chatLog]);
-  useEffect(() => { if (state.actionLog) setActionLog(state.actionLog); }, [state.actionLog]);
-
-  // מאזינים ל־socket (אם זמינים) כדי לעדכן בזמן אמת
-  useEffect(() => {
-    const sock = getSocket?.();
-    if (!sock) return;
-
-    const onChat = (msg: { from: string; text: string; ts?: number }) => {
-      setChatLog(prev => [...prev, { from: msg.from, text: msg.text, ts: msg.ts ?? Date.now() }]);
-    };
-    const onHist = (entry: ActionLogItem) => {
-      setActionLog(prev => [...prev, entry]);
-    };
-
-    // שים לב: שנה לשמות האירועים בפועל אצלך אם צריך
-    (sock as any).on?.('chat:message', onChat);
-    (sock as any).on?.('history:action', onHist);
-
-    return () => {
-      (sock as any).off?.('chat:message', onChat);
-      (sock as any).off?.('history:action', onHist);
-    };
-  }, []);
-
   useEffect(() => {
     // load persisted
     try {
@@ -502,7 +471,7 @@ export default function Table({
       setLiveBanner({ text: txt, key: Date.now() });
       setPotPulse(true);
       setHighlightSeat(state.lastAggressorSeat);
-      playRaise();
+      playRaise(); // << סאונד צ'יפים על רייז/אול-אין
 
       window.setTimeout(() => setPotPulse(false), 650);
       window.setTimeout(() => setHighlightSeat(null), 900);
@@ -522,6 +491,38 @@ export default function Table({
   useEffect(() => {
     try { localStorage.setItem('pf_mute_raise', muteRaise ? '1':'0'); } catch {}
   }, [muteRaise]);
+
+  /* עזר לרינדור לוגים מכל צורה סבירה */
+  const normalizedHistory = useMemo(() => {
+    const raw: any = (state as any).actionLog;
+    if (!Array.isArray(raw)) return [] as { ts:number; text:string }[];
+    return raw.map((r:any) => {
+      if (typeof r === 'string') return { ts: 0, text: r as string };
+      const ts = typeof r?.ts === 'number' ? r.ts : 0;
+      const text = String((r?.text ?? ''));
+      return { ts, text };
+    });
+  }, [state]);
+
+  const normalizedChat = useMemo(() => {
+    const raw: any = (state as any).chatLog;
+    if (!Array.isArray(raw)) return [] as { ts:number; from?:string; text:string }[];
+    return raw.map((r:any) => {
+      if (typeof r === 'string') return { ts: 0, text: r as string };
+      const ts = typeof r?.ts === 'number' ? r.ts : 0;
+      const from = r?.from ? String(r.from) : undefined;
+      const text = String((r?.text ?? ''));
+      return { ts, from, text };
+    });
+  }, [state]);
+
+  /* גלילה אוטומטית לצ'אט */
+  const chatScrollRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
+  }, [normalizedChat]);
 
   return (
     <div className="w-full h-full flex flex-col gap-3">
@@ -727,7 +728,7 @@ export default function Table({
           <div className={heroTurn ? 'turn-outline' : ''}>
             <div
               className={[
-                'relative',
+                'relative', // חשוב: לעיגון כפתור ה-Mute כמוחלט
                 'rounded-2xl hero-skin hero-felt',
                 isSeatWinner(hero.seat)
                   ? (heroCompact ? 'border-2 border-amber-500 bg-amber-50 p-3' : 'border-2 border-amber-500 bg-amber-50 p-5')
@@ -895,15 +896,19 @@ export default function Table({
                 סגור
               </button>
             </div>
-            <div className="p-3 text-sm text-slate-700 overflow-auto grow space-y-2">
-              {chatLog.length === 0 ? (
-                <div className="text-slate-400">אין הודעות עדיין…</div>
-              ) : chatLog.map((m, idx) => (
-                <div key={idx} className="flex gap-2">
-                  <span className="font-semibold">{m.from}:</span>
-                  <span>{m.text}</span>
-                </div>
-              ))}
+            <div ref={chatScrollRef} className="p-3 text-sm text-slate-700 overflow-auto grow">
+              {normalizedChat.length === 0 ? (
+                <div className="text-slate-500">אין הודעות עדיין…</div>
+              ) : (
+                <ul className="space-y-1.5">
+                  {normalizedChat.map((m, idx) => (
+                    <li key={idx} className="flex items-start gap-2">
+                      {m.from ? <span className="font-semibold">{m.from}:</span> : null}
+                      <span className="text-slate-700">{m.text}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
         </div>
@@ -923,13 +928,16 @@ export default function Table({
                 סגור
               </button>
             </div>
-            <div className="p-3 text-sm text-slate-700 overflow-auto grow space-y-2">
-              {actionLog.length === 0 ? (
-                <div className="text-slate-400">אין מהלכים עדיין…</div>
-              ) : actionLog.map((line, i) => {
-                  const txt = typeof line === 'string' ? line : line.text;
-                  return <div key={i}>• {txt}</div>;
-                })}
+            <div className="p-3 text-sm text-slate-700 overflow-auto grow">
+              {normalizedHistory.length === 0 ? (
+                <div className="text-slate-500">אין מהלכים עדיין…</div>
+              ) : (
+                <ul className="space-y-1.5">
+                  {normalizedHistory.map((h, idx) => (
+                    <li key={idx}>{h.text}</li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
         </div>
