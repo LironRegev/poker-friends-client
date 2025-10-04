@@ -657,7 +657,7 @@ export default function Table({
       {/* === שולחן === */}
       <div className="mt-1">
         <div className="relative mx-auto w-full max-w-[1100px] md:max-w-[1280px] -mt-2 md:-mt-2 overflow-x-hidden">
-          <div className="relative mx-auto aspect-[13/3] max-h-[190px]">
+          <div className="relative mx-auto h-[220px] md:aspect-[13/3] md:max-h-[190px] overflow-hidden">
             {/* RAIL — מוסתר במובייל */}
             <div
               className="
@@ -688,7 +688,7 @@ export default function Table({
             </div>
 
             {/* אזור הקלפים — מוזז מעט שמאלה במובייל */}
-            <div className="absolute inset-x-[15px] inset-y-[6px] rounded-[999px] grid place-items-center">
+            <div className="absolute inset-x-[12px] inset-y-[6px] rounded-[999px] grid place-items-center">
               <BoardCards community={state.community} winOverlay={winOverlay} />
             </div>
           </div>
