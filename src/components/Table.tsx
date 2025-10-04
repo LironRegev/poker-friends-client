@@ -35,6 +35,10 @@ type State = {
   lastWinners?: WinnerInfo[];
 };
 
+/* === טיפוסים לנתוני Chat/History (למגירות החדשות) === */
+type ChatMessage = { id: string; from: string; text: string; ts: number };
+type HistoryItem = { id: string; text: string; ts: number };
+
 /* ---------- תמונות ---------- */
 const CARD_DIR = '/cards';
 const BACK_CANDIDATES = ['BACK.png', 'back.png', 'Back.png'];
@@ -299,10 +303,14 @@ export default function Table({
   state,
   me,
   onAction,
+  chatMessages = [],
+  handHistory = [],
 }:{
   state: State;
   me: { name: string; stack: number };
   onAction: (kind:'fold'|'check'|'call'|'bet'|'raise', amount?:number)=>void;
+  chatMessages?: ChatMessage[];   // נתוני צ'אט חיים
+  handHistory?: HistoryItem[];    // היסטוריית מהלכים חיה
 }) {
   const hero = useMemo(()=>{
     return (state.players as any[]).find(p => p.hole)
@@ -861,8 +869,7 @@ export default function Table({
               </button>
             </div>
             <div className="p-3 text-sm text-slate-700 overflow-auto grow">
-              {/* TODO: חבר כאן קומפוננטת צ׳אט אמיתית */}
-              <div className="text-slate-500">צ׳אט יופיע כאן…</div>
+              <ChatPanel messages={chatMessages} />
             </div>
           </div>
         </div>
@@ -883,8 +890,7 @@ export default function Table({
               </button>
             </div>
             <div className="p-3 text-sm text-slate-700 overflow-auto grow">
-              {/* TODO: חבר כאן את היסטוריית המהלכים */}
-              <div className="text-slate-500">היסטוריית מהלכים תופיע כאן…</div>
+              <HistoryPanel items={handHistory} />
             </div>
           </div>
         </div>
@@ -1064,6 +1070,50 @@ function HeroCards({ hole, compact = false }:{ hole: Card[]; compact?: boolean }
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/* === Panels עבור Chat/History (למגירות) === */
+function ChatPanel({messages}:{messages: ChatMessage[]}) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  useEffect(()=>{ boxRef.current?.scrollTo({ top: boxRef.current.scrollHeight }); }, [messages]);
+  return (
+    <div ref={boxRef} className="max-h-[calc(100vh-160px)] overflow-auto">
+      {messages.length === 0 ? (
+        <div className="text-sm text-slate-500">אין הודעות עדיין.</div>
+      ) : (
+        <ul className="space-y-2">
+          {messages.map(m=>(
+            <li key={m.id} className="text-sm">
+              <span className="font-semibold">{m.from}:</span>{' '}
+              <span>{m.text}</span>
+              <span className="ml-2 text-[11px] text-slate-500">{new Date(m.ts).toLocaleTimeString()}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function HistoryPanel({items}:{items: HistoryItem[]}) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  useEffect(()=>{ boxRef.current?.scrollTo({ top: boxRef.current.scrollHeight }); }, [items]);
+  return (
+    <div ref={boxRef} className="max-h-[calc(100vh-160px)] overflow-auto">
+      {items.length === 0 ? (
+        <div className="text-sm text-slate-500">אין מהלכים עדיין.</div>
+      ) : (
+        <ol className="space-y-1 list-decimal list-inside text-sm">
+          {items.map(it=>(
+            <li key={it.id}>
+              <span>{it.text}</span>
+              <span className="ml-2 text-[11px] text-slate-500">{new Date(it.ts).toLocaleTimeString()}</span>
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   );
 }

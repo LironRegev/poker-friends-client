@@ -32,4 +32,12 @@ html, body, #root {
     min-height: 44px;
     min-width: 44px;
   }
+
+  /* ===== הסתרה גורפת של הצ'אט/היסטוריה הישנים במובייל ===== */
+  #chatDock, #historyDock,
+  .chat-dock, .history-dock,
+  .chat-container, .history-container,
+  [data-legacy="chat"], [data-legacy="history"] {
+    display: none !important;
+  }
 }
