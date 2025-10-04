@@ -10,8 +10,10 @@ html, body, #root {
 :root { --safe-bottom: env(safe-area-inset-bottom, 0px); }
 
 @media (max-width: 640px) {
+  /* כן לאפשר גלילה אנכית במובייל, אבל לחסום גלילה אופקית */
   html, body, #root {
-    overflow: visible; /* כן לאפשר גלילה במובייל */
+    overflow-y: visible;
+    overflow-x: hidden;
   }
 
   .mobile-safe-pad {

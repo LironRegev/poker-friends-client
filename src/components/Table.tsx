@@ -417,7 +417,6 @@ export default function Table({
   const [minHero, setMinHero] = useState(false);
   const openExtras = () => {
     setMinHero(true);
-    // לגלול אחרי שה-DOM עודכן
     setTimeout(() => {
       const el = document.getElementById('extras');
       if (el) {
@@ -428,7 +427,6 @@ export default function Table({
   };
   const closeExtras = () => {
     setMinHero(false);
-    // לחזור למטה בעדינות
     setTimeout(() => {
       const y = document.body.scrollHeight;
       window.scrollTo({ top: y, behavior: 'smooth' });
@@ -658,25 +656,28 @@ export default function Table({
 
       {/* === שולחן === */}
       <div className="mt-1">
-        <div className="relative mx-auto w-full max-w-[1100px] md:max-w-[1280px] -mt-2 md:-mt-2">
+        <div className="relative mx-auto w-full max-w-[1100px] md:max-w-[1280px] -mt-2 md:-mt-2 overflow-x-hidden">
           <div className="relative mx-auto aspect-[13/3] max-h-[190px]">
-            {/* RAIL */}
+            {/* RAIL — מוסתר במובייל */}
             <div
               className="
+                hidden md:block
                 absolute inset-0 rounded-[999px]
                 bg-[conic-gradient(from_210deg_at_50%_50%,#8a6a55_0%,#6e523d_30%,#8a6a55_65%,#5c4636_100%)]
                 shadow-[inset_0_0_0_6px_rgba(0,0,0,0.12),0_10px_22px_rgba(0,0,0,0.22)]
               "
             />
-            {/* FELT */}
+            {/* FELT — מוסתר במובייל */}
             <div
               className="
+                hidden md:block
                 absolute inset-[12px] rounded-[999px]
                 bg-[radial-gradient(ellipse_at_center,#7b604c_0%,#6a5242_45%,#5a463a_85%)]
                 shadow-[inset_0_0_36px_rgba(0,0,0,0.22)]
               "
             />
-            <div className="absolute inset-[12px] rounded-[999px] ring-1 ring-black/10 pointer-events-none" />
+            {/* טבעת — מוסתרת במובייל */}
+            <div className="hidden md:block absolute inset-[12px] rounded-[999px] ring-1 ring-black/10 pointer-events-none" />
 
             {/* POT overlay */}
             <div className="absolute left-5 top-3 md:left-96 md:top-2 z-10 pointer-events-none select-none">
@@ -686,8 +687,8 @@ export default function Table({
               </div>
             </div>
 
-            {/* אזור הקלפים */}
-            <div className="absolute inset-[12px] rounded-[999px] grid place-items-center">
+            {/* אזור הקלפים — מוזז מעט שמאלה במובייל */}
+            <div className="absolute inset-[12px] rounded-[999px] grid place-items-center -translate-x-1 md:translate-x-0">
               <BoardCards community={state.community} winOverlay={winOverlay} />
             </div>
           </div>
@@ -960,7 +961,7 @@ function BoardCards({
   const used    = new Set(winOverlay?.usedBoardIdxs ?? []);
 
   return (
-    <div className="flex items-center justify-center gap-2 overflow-visible">
+    <div className="flex items-center justify-center gap-1.5 md:gap-2 overflow-visible">
       {Array.from({ length: 5 }).map((_, i) => {
         const c = community[i];
         const faceKey = `face-${i}-${appearKeys[i]}`;
@@ -973,7 +974,7 @@ function BoardCards({
 
         const wrapperClasses = [
           "relative",
-          "w-[80px] h-[120px]",
+          "w-[68px] h-[102px] md:w-[80px] md:h-[120px]",
           "rounded-[0.3rem]",
           goldBoard ? "ring-2 ring-amber-400 ring-offset-[3px] ring-offset-[#5a463a]" : "",
           "overflow-visible",
