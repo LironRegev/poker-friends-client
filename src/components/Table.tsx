@@ -502,6 +502,44 @@ export default function Table({
 
         /* אילוץ טקסט שחור לכל חלון/פופאובר שנעטף במחלקה הזו (ALL-IN, MUTE וכו') */
         .force-dark, .force-dark * { color:#000 !important; }
+
+        /* === ביטול ספינרים מקוריים בדפדפנים + חצים מותאמים אישית (ללא רקע שחור) === */
+        .hero-skin input[type="number"]::-webkit-inner-spin-button,
+        .hero-skin input[type="number"]::-webkit-outer-spin-button{
+          -webkit-appearance: none;
+          margin: 0;
+        }
+        .hero-skin input[type="number"]{ -moz-appearance: textfield; }
+
+        .num-wrap { position: relative; }
+        .num-wrap input { padding-right: 2.4rem; }
+
+        .num-arrow{
+          position: absolute;
+          right: 8px;
+          width: 22px;
+          height: 18px;
+          display: grid;
+          place-items: center;
+          background: transparent;
+          border: 0;
+          cursor: pointer;
+          border-radius: 6px;
+        }
+        .num-arrow.up   { top: 6px; }
+        .num-arrow.down { bottom: 6px; }
+
+        .num-arrow::before{
+          content: '';
+          width: 0; height: 0;
+          border-left: 6px solid transparent;
+          border-right: 6px solid transparent;
+        }
+        .num-arrow.up::before   { border-bottom: 8px solid #fff; opacity: .95; }
+        .num-arrow.down::before { border-top:    8px solid #fff; opacity: .95; }
+
+        .num-arrow:hover { background: rgba(255,255,255,.12); }
+        .num-arrow:active{ transform: translateY(1px); }
       `}</style>
 
       {/* Live Banner */}
@@ -681,18 +719,43 @@ export default function Table({
                 }
                 .hero-skin input::placeholder{ color:rgba(255,255,255,0.7); }
 
-                .hero-skin input[type="number"]::-webkit-outer-spin-button,
-                .hero-skin input[type="number"]::-webkit-inner-spin-button{
-                  -webkit-appearance: inner-spin-button;
-                  background: transparent !important;
-                  border: none !important;
-                  box-shadow: none !important;
+                /* === ביטול ספינרים מקוריים בדפדפנים + חצים מותאמים אישית (ללא רקע שחור) === */
+                .hero-skin input[type="number"]::-webkit-inner-spin-button,
+                .hero-skin input[type="number"]::-webkit-outer-spin-button{
+                  -webkit-appearance: none;
                   margin: 0;
-                  width: 16px;
-                  filter: brightness(0);
-                  opacity: 1;
                 }
                 .hero-skin input[type="number"]{ -moz-appearance: textfield; }
+
+                .num-wrap { position: relative; }
+                .num-wrap input { padding-right: 2.4rem; }
+
+                .num-arrow{
+                  position: absolute;
+                  right: 8px;
+                  width: 22px;
+                  height: 18px;
+                  display: grid;
+                  place-items: center;
+                  background: transparent;
+                  border: 0;
+                  cursor: pointer;
+                  border-radius: 6px;
+                }
+                .num-arrow.up   { top: 6px; }
+                .num-arrow.down { bottom: 6px; }
+
+                .num-arrow::before{
+                  content: '';
+                  width: 0; height: 0;
+                  border-left: 6px solid transparent;
+                  border-right: 6px solid transparent;
+                }
+                .num-arrow.up::before   { border-bottom: 8px solid #fff; opacity: .95; }
+                .num-arrow.down::before { border-top:    8px solid #fff; opacity: .95; }
+
+                .num-arrow:hover { background: rgba(255,255,255,.12); }
+                .num-arrow:active{ transform: translateY(1px); }
               `}</style>
 
               {/* === כפתור MUTE בפינה (פתיחה למעלה, טקסט שחור) === */}
@@ -703,7 +766,6 @@ export default function Table({
                     onClick={()=> setShowMute(v=>!v)}
                     title="השתקת צלילים"
                   >
-                    {/* אייקון רמקול/מושתק לפי מצב */}
                     <span aria-hidden>{(muteTurn || muteRaise) ? '🔇' : '🔊'}</span>
                   </button>
                   {showMute && (
@@ -758,7 +820,7 @@ export default function Table({
               {/* קלפי HERO + WinnerBadge (טקסט שחור) */}
               <div className="mt-2 flex flex-col items-center gap-3">
                 {hero.hole && hero.hole.length > 0 && (
-                  <HeroCards hole={hero.hole} compact={heroCompact} />
+                  <HeroCards hole={hero.hole!} compact={heroCompact} />
                 )}
                 {state.lastWinners && state.lastWinners.length > 0 && (
                   <div className="winner-text-force">
@@ -878,19 +940,26 @@ function BoardCards({
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [winOverlay]);
 
-  const falling = new Set(winOverlay?.replaceIdxs ?? []);
-  const used    = new Set(winOverlay?.usedBoardIdxs ?? []);
+  // סטים ממומואזים עם טיפוס מפורש (מסירים אזהרות)
+  const falling = React.useMemo<Set<number>>(
+    () => new Set<number>(winOverlay?.replaceIdxs ?? []),
+    [winOverlay]
+  );
+  const used = React.useMemo<Set<number>>(
+    () => new Set<number>(winOverlay?.usedBoardIdxs ?? []),
+    [winOverlay]
+  );
 
   return (
     <div className="flex items-center justify-center gap-2 overflow-visible">
       {Array.from({ length: 5 }).map((_, i) => {
         const c = community[i];
-        const faceKey = `face-${i}-${appearKeys[i]}`;
+        const faceKey = `face-${i}-${(appearKeys[i] ?? 0)}`;
 
         const ghosted   = !!winOverlay && phase !== 'idle' && falling.has(i);
         const animateNow= !!winOverlay && phase === 'fall' && falling.has(i);
 
-        const showEnter = winOverlay && (phase==='enter' || phase==='hold') && falling.has(i);
+        const showEnter = !!winOverlay && (phase==='enter' || phase==='hold') && falling.has(i);
         const goldBoard = !!winOverlay && phase!=='idle' && used.has(i) && !falling.has(i);
 
         const wrapperClasses = [
@@ -909,7 +978,7 @@ function BoardCards({
           willChange: 'transform, opacity, filter'
         } : undefined;
 
-        const enterCard = showEnter && winOverlay?.enteringMap[i];
+        const enterCard = (showEnter && winOverlay) ? winOverlay.enteringMap[i] : undefined;
 
         return (
           <div key={i} className={wrapperClasses}>

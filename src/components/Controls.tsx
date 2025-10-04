@@ -246,14 +246,30 @@ export default function Controls({
             {/* שדה וכפתורי BY */}
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={delta}
-                  onChange={(e)=> setDelta(Math.max(1, Math.floor(Number(e.target.value)||0)))}
-                  className="w-28 rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                />
+                {/* מספר עם חצים לבנים מותאמים */}
+                <div className="num-wrap">
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={delta}
+                    onChange={(e)=> setDelta(Math.max(1, Math.floor(Number(e.target.value)||0)))}
+                    className="w-28 rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  />
+                  <button
+                    type="button"
+                    className="num-arrow up"
+                    aria-label="Increase"
+                    onClick={()=> setDelta(d => d + 1)}
+                  />
+                  <button
+                    type="button"
+                    className="num-arrow down"
+                    aria-label="Decrease"
+                    onClick={()=> setDelta(d => Math.max(1, d - 1))}
+                  />
+                </div>
+
                 <span className="text-[11px] text-slate-500">
                   {state.currentBet === 0
                     ? `min bet: ${currency}${BB}`
