@@ -106,6 +106,7 @@ export default function App() {
     socket.emit('chat', { code, text, name: me.name || 'Player' });
   }
 
+  // ——— רקע ———
   const carpetTileSvg = `<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300' viewBox='0 0 300 300'>
     <defs><radialGradient id='bg' cx='50%' cy='50%' r='65%'>
     <stop offset='0%' stop-color='#2b1411'/><stop offset='100%' stop-color='#1e100e'/>
@@ -113,6 +114,18 @@ export default function App() {
     <rect width='100%' height='100%' fill='url(#bg)'/></svg>`.replace(/\s+/g, ' ');
   const carpetDataUri = `url("data:image/svg+xml;utf8,${encodeURIComponent(carpetTileSvg)}")`;
   const casinoFloorStyle: React.CSSProperties = { backgroundImage: carpetDataUri, backgroundColor: '#211210' };
+
+  // ====== חשוב: פתיחה/סגירה בלחיצה אחת ======
+  const openMobileReveal = () => {
+    // נועל גלילה ברקע כדי שלא יקרה "קפיצה" ותזוזת כפתור
+    try { document.documentElement.style.overflow = 'hidden'; document.body.style.overflow = 'hidden'; } catch {}
+    setMobileReveal(true);
+  };
+  const closeMobileReveal = () => {
+    setMobileReveal(false);
+    // משחרר את נעילת הגלילה
+    try { document.documentElement.style.overflow = ''; document.body.style.overflow = ''; } catch {}
+  };
 
   if (!state) {
     return (
@@ -128,7 +141,7 @@ export default function App() {
       <div className="fixed inset-0 -z-10" style={casinoFloorStyle} />
 
       {/* תוכן ראשי – מוסתר בזמן פתיחת הצ'אט במובייל */}
-      <div className={`h-full grid gap-3 md:grid-cols-[1fr_300px] px-4 md:px-6 pt-4 transition-opacity duration-300 ${mobileReveal ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+      <div className={`h-full grid gap-3 md:grid-cols-[1fr_300px] px-4 md:px-6 pt-4 transition-opacity duration-200 ${mobileReveal ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
         {/* שמאל: המשחק */}
         <div className="h-full flex flex-col min-h-0">
           <RoomHeader
@@ -146,11 +159,11 @@ export default function App() {
             />
           </div>
 
-          {/* כפתור פתיחת צ'אט/היסטוריה במובייל */}
+          {/* כפתור פתיחת צ'אט/היסטוריה במובייל – קליק אחד פותח את החלון */}
           <div className="md:hidden flex justify-center mt-2 mb-3">
             <button
               className="px-4 py-2 rounded-full bg-white border border-slate-300 shadow text-sm font-medium"
-              onClick={() => setMobileReveal(true)}
+              onClick={openMobileReveal}
             >
               חשוף צ׳אט/היסטוריה
             </button>
@@ -168,21 +181,22 @@ export default function App() {
         </div>
       </div>
 
-      {/* Mobile overlay — נפתח רק בלחיצה העליונה */}
+      {/* Mobile overlay — נפתח רק מהכפתור העליון */}
       {mobileReveal && (
-        <div className="md:hidden fixed inset-0 z-[90]">
-          <div className="absolute inset-0 bg-black/35" onClick={() => setMobileReveal(false)} />
+        <div className="md:hidden fixed inset-0 z-[999]">
+          <div className="absolute inset-0 bg-black/35" onClick={closeMobileReveal} />
           <div className="absolute bottom-3 left-3 right-3 rounded-2xl border border-slate-200 bg-white shadow-xl">
             <div className="px-4 py-2 border-b border-slate-200 flex items-center justify-between">
               <div className="font-semibold">צ׳אט / היסטוריה</div>
               <button
                 className="px-2 py-1 rounded-md border border-slate-300 bg-white hover:bg-slate-50 text-sm"
-                onClick={() => setMobileReveal(false)}
+                onClick={closeMobileReveal}
               >
                 סגור
               </button>
             </div>
             <div className="p-3 pt-3">
+              {/* גבהים קבועים + גלילה פנימית כדי שהצ׳אט לא ידחוף את ההיסטוריה */}
               <div className="h-[78vh] grid grid-rows-[3fr_2fr] gap-3">
                 <section className="rounded-xl border border-slate-200 overflow-hidden">
                   <div className="h-full overflow-y-auto p-2">
