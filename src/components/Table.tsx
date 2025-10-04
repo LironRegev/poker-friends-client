@@ -2,7 +2,7 @@ import React, { useMemo, useEffect, useRef, useState } from 'react';
 import Controls from './Controls';
 import { emitShowCards, emitMuckCards } from '../api/socket';
 import WinnerBadge from './WinnerBadge';
-import MobileHUD from './MobileHUD';
+// import MobileHUD from './MobileHUD'; // הוסר לפי בקשתך
 
 type Card = { rank:number; suit:'♣'|'♦'|'♥'|'♠' };
 type Player = {
@@ -411,6 +411,10 @@ export default function Table({
   const [muteTurn, setMuteTurn] = useState<boolean>(false);
   const [muteRaise, setMuteRaise] = useState<boolean>(false);
 
+  // Drawers – Chat / History
+  const [showChat, setShowChat] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+
   useEffect(() => {
     // load persisted
     try {
@@ -513,7 +517,6 @@ export default function Table({
 
         .num-wrap { position: relative; }
         .num-wrap input { padding-right: 2.4rem; }
-
         .num-arrow{
           position: absolute;
           right: 8px;
@@ -528,7 +531,6 @@ export default function Table({
         }
         .num-arrow.up   { top: 6px; }
         .num-arrow.down { bottom: 6px; }
-
         .num-arrow::before{
           content: '';
           width: 0; height: 0;
@@ -537,13 +539,28 @@ export default function Table({
         }
         .num-arrow.up::before   { border-bottom: 8px solid #fff; opacity: .95; }
         .num-arrow.down::before { border-top:    8px solid #fff; opacity: .95; }
-
         .num-arrow:hover { background: rgba(255,255,255,.12); }
         .num-arrow:active{ transform: translateY(1px); }
       `}</style>
 
       {/* Live Banner */}
       {liveBanner && <LiveBanner text={liveBanner.text} />}
+
+      {/* פעולות כלליות: Chat / History */}
+      <div className="flex items-center justify-end gap-2 -mb-1">
+        <button
+          className="px-3 py-1.5 rounded-full border border-slate-300 bg-white hover:bg-slate-50 text-sm"
+          onClick={()=>{ setShowChat(v=>!v); setShowHistory(false); }}
+        >
+          Chat
+        </button>
+        <button
+          className="px-3 py-1.5 rounded-full border border-slate-300 bg-white hover:bg-slate-50 text-sm"
+          onClick={()=>{ setShowHistory(v=>!v); setShowChat(false); }}
+        >
+          History
+        </button>
+      </div>
 
       {/* רצועת שחקנים למעלה */}
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
@@ -719,42 +736,29 @@ export default function Table({
                 }
                 .hero-skin input::placeholder{ color:rgba(255,255,255,0.7); }
 
-                /* === ביטול ספינרים מקוריים בדפדפנים + חצים מותאמים אישית (ללא רקע שחור) === */
+                /* === ביטול ספינרים מקוריים + חצים מותאמים (גם במובייל) === */
                 .hero-skin input[type="number"]::-webkit-inner-spin-button,
                 .hero-skin input[type="number"]::-webkit-outer-spin-button{
-                  -webkit-appearance: none;
-                  margin: 0;
+                  -webkit-appearance: none; margin: 0;
                 }
                 .hero-skin input[type="number"]{ -moz-appearance: textfield; }
 
                 .num-wrap { position: relative; }
                 .num-wrap input { padding-right: 2.4rem; }
-
                 .num-arrow{
-                  position: absolute;
-                  right: 8px;
-                  width: 22px;
-                  height: 18px;
-                  display: grid;
-                  place-items: center;
-                  background: transparent;
-                  border: 0;
-                  cursor: pointer;
-                  border-radius: 6px;
+                  position: absolute; right: 8px; width: 22px; height: 18px;
+                  display: grid; place-items: center; background: transparent;
+                  border: 0; cursor: pointer; border-radius: 6px;
                 }
-                .num-arrow.up   { top: 6px; }
-                .num-arrow.down { bottom: 6px; }
-
+                .num-arrow.up{ top: 6px; }
+                .num-arrow.down{ bottom: 6px; }
                 .num-arrow::before{
-                  content: '';
-                  width: 0; height: 0;
-                  border-left: 6px solid transparent;
-                  border-right: 6px solid transparent;
+                  content:''; width:0; height:0;
+                  border-left:6px solid transparent; border-right:6px solid transparent;
                 }
-                .num-arrow.up::before   { border-bottom: 8px solid #fff; opacity: .95; }
-                .num-arrow.down::before { border-top:    8px solid #fff; opacity: .95; }
-
-                .num-arrow:hover { background: rgba(255,255,255,.12); }
+                .num-arrow.up::before{ border-bottom:8px solid #fff; opacity:.95; }
+                .num-arrow.down::before{ border-top:8px solid #fff; opacity:.95; }
+                .num-arrow:hover{ background:rgba(255,255,255,.12); }
                 .num-arrow:active{ transform: translateY(1px); }
               `}</style>
 
@@ -820,7 +824,7 @@ export default function Table({
               {/* קלפי HERO + WinnerBadge (טקסט שחור) */}
               <div className="mt-2 flex flex-col items-center gap-3">
                 {hero.hole && hero.hole.length > 0 && (
-                  <HeroCards hole={hero.hole!} compact={heroCompact} />
+                  <HeroCards hole={hero.hole} compact={heroCompact} />
                 )}
                 {state.lastWinners && state.lastWinners.length > 0 && (
                   <div className="winner-text-force">
@@ -842,16 +846,49 @@ export default function Table({
         </div>
       )}
 
-      {/* === Mobile HUD (מופיע רק במסכים קטנים) === */}
-      <div className="md:hidden">
-        <MobileHUD
-          state={state}
-          me={me}
-          onAction={onAction}
-          onReveal={onReveal}
-          isHeroTurn={heroTurn}
-        />
-      </div>
+      {/* === Drawer: Chat === */}
+      {showChat && (
+        <div className="fixed inset-0 z-[80]">
+          <div className="absolute inset-0 bg-black/30" onClick={()=>setShowChat(false)} />
+          <div className="absolute right-0 top-0 h-full w-[88vw] sm:w-[420px] bg-white shadow-xl border-l border-slate-200 flex flex-col">
+            <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+              <div className="font-semibold">Chat</div>
+              <button
+                className="px-2 py-1 rounded-md border border-slate-300 bg-white hover:bg-slate-50 text-sm"
+                onClick={()=> setShowChat(false)}
+              >
+                סגור
+              </button>
+            </div>
+            <div className="p-3 text-sm text-slate-700 overflow-auto grow">
+              {/* TODO: חבר כאן קומפוננטת צ׳אט אמיתית */}
+              <div className="text-slate-500">צ׳אט יופיע כאן…</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* === Drawer: History === */}
+      {showHistory && (
+        <div className="fixed inset-0 z-[80]">
+          <div className="absolute inset-0 bg-black/30" onClick={()=>setShowHistory(false)} />
+          <div className="absolute left-0 top-0 h-full w-[88vw] sm:w-[420px] bg-white shadow-xl border-r border-slate-200 flex flex-col">
+            <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+              <div className="font-semibold">History</div>
+              <button
+                className="px-2 py-1 rounded-md border border-slate-300 bg-white hover:bg-slate-50 text-sm"
+                onClick={()=> setShowHistory(false)}
+              >
+                סגור
+              </button>
+            </div>
+            <div className="p-3 text-sm text-slate-700 overflow-auto grow">
+              {/* TODO: חבר כאן את היסטוריית המהלכים */}
+              <div className="text-slate-500">היסטוריית מהלכים תופיע כאן…</div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -940,26 +977,19 @@ function BoardCards({
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [winOverlay]);
 
-  // סטים ממומואזים עם טיפוס מפורש (מסירים אזהרות)
-  const falling = React.useMemo<Set<number>>(
-    () => new Set<number>(winOverlay?.replaceIdxs ?? []),
-    [winOverlay]
-  );
-  const used = React.useMemo<Set<number>>(
-    () => new Set<number>(winOverlay?.usedBoardIdxs ?? []),
-    [winOverlay]
-  );
+  const falling = new Set(winOverlay?.replaceIdxs ?? []);
+  const used    = new Set(winOverlay?.usedBoardIdxs ?? []);
 
   return (
     <div className="flex items-center justify-center gap-2 overflow-visible">
       {Array.from({ length: 5 }).map((_, i) => {
         const c = community[i];
-        const faceKey = `face-${i}-${(appearKeys[i] ?? 0)}`;
+        const faceKey = `face-${i}-${appearKeys[i]}`;
 
         const ghosted   = !!winOverlay && phase !== 'idle' && falling.has(i);
         const animateNow= !!winOverlay && phase === 'fall' && falling.has(i);
 
-        const showEnter = !!winOverlay && (phase==='enter' || phase==='hold') && falling.has(i);
+        const showEnter = winOverlay && (phase==='enter' || phase==='hold') && falling.has(i);
         const goldBoard = !!winOverlay && phase!=='idle' && used.has(i) && !falling.has(i);
 
         const wrapperClasses = [
@@ -978,7 +1008,7 @@ function BoardCards({
           willChange: 'transform, opacity, filter'
         } : undefined;
 
-        const enterCard = (showEnter && winOverlay) ? winOverlay.enteringMap[i] : undefined;
+        const enterCard = showEnter && winOverlay?.enteringMap[i];
 
         return (
           <div key={i} className={wrapperClasses}>
