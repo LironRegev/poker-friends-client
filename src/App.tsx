@@ -41,6 +41,9 @@ type State = {
   revealSeats?: number[];     // מי יכול לבצע Show/Muck
   lastWinners?: WinnerInfo[]; // תצוגת מנצחים ליד ה-HERO
   actionLog?: { ts:number; text:string }[]; // יומן מהשרת
+
+  // מוסיף תמיכה בצ'אט אופציונלי כדי שהמגירה במובייל תתמלא
+  chatLog?: { ts?:number; from?:string; text:string }[];
 };
 
 type RoomSettings = {
@@ -231,6 +234,12 @@ export default function App(){
     );
   }
 
+  // === דוחפים את הצ'אט המקומי לתוך state שנשלח ל-Table (למגירות מובייל) ===
+  const stateForTable: State = useMemo(() => {
+    const chatLog = chat.map(m => ({ ts: m.ts, from: m.name, text: m.text }));
+    return { ...(state as State), chatLog };
+  }, [state, chat]);
+
   return (
     <div className="h-screen">
       {/* שכבות רצפה מאחור — אינן משנות את הגריד/מידות */}
@@ -249,7 +258,7 @@ export default function App(){
           />
           <div className="flex-1 min-h-0">
             <Table
-              state={state}
+              state={stateForTable}
               me={me}
               onAction={(kind, amount) =>
                 socket.emit('action', { code, kind, amount })
@@ -258,8 +267,8 @@ export default function App(){
           </div>
         </div>
 
-        {/* ימין: צ'אט + יומן פעולות */}
-        <div className="h-full min-h-0 overflow-hidden flex flex-col gap-3">
+        {/* ימין: צ'אט + יומן פעולות — מוסתר לחלוטין במובייל */}
+        <div className="hidden md:flex h-full min-h-0 overflow-hidden flex-col gap-3">
           <div className="flex-1 min-h-[200px] rounded-2xl border border-slate-200 bg-white p-2 overflow-y-auto">
             <Chat chat={chat} onSend={sendChat} />
           </div>
