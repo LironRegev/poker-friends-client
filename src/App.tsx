@@ -13,39 +13,18 @@ type Player = {
   isOwner?: boolean; holeCount?: number; hole?: Card[]; publicHole?: Card[];
 };
 type Stage = 'waiting'|'preflop'|'flop'|'turn'|'river'|'showdown';
-
 type WinnerInfo = {
   seat: number; name: string; amount: number; category: number | null; categoryName: string;
 };
-
 type State = {
-  code: string;
-  stage: Stage;
-  players: Player[];
-  dealerSeat: number;
-  smallBlind: number;
-  bigBlind: number;
-  currentBet: number;
-  minRaise: number;
-  pot: number;
-  community: Card[];
-  turnSeat: number;
-  lastAggressorSeat: number | null;
-  message?: string;
-  currency?: string;
-  buyInMin?: number;
-  buyInDefault?: number;
-  revealSeats?: number[];
-  lastWinners?: WinnerInfo[];
-  actionLog?: { ts:number; text:string }[];
+  code: string; stage: Stage; players: Player[]; dealerSeat: number;
+  smallBlind: number; bigBlind: number; currentBet: number; minRaise: number;
+  pot: number; community: Card[]; turnSeat: number; lastAggressorSeat: number | null;
+  message?: string; currency?: string; buyInMin?: number; buyInDefault?: number;
+  revealSeats?: number[]; lastWinners?: WinnerInfo[]; actionLog?: { ts:number; text:string }[];
 };
-
 type RoomSettings = {
-  smallBlind: number;
-  bigBlind: number;
-  buyInMin: number;
-  buyInDefault: number;
-  currency: string;
+  smallBlind: number; bigBlind: number; buyInMin: number; buyInDefault: number; currency: string;
 };
 
 export default function App() {
@@ -56,7 +35,6 @@ export default function App() {
   const [chat, setChat] = useState<{ name: string; text: string; ts: number }[]>([]);
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [mobileReveal, setMobileReveal] = useState(false);
-
   const prevStateRef = useRef<State | null>(null);
 
   function requestPrivateState(roomCode?: string, fallback?: State) {
@@ -149,14 +127,26 @@ export default function App() {
     <div className="h-screen">
       <div className="fixed inset-0 -z-10" style={casinoFloorStyle} />
 
-      <div className="h-full grid gap-3 md:grid-cols-[1fr_300px] px-4 md:px-6 pt-4">
+      {/* תוכן ראשי – מוסתר בזמן פתיחת הצ'אט במובייל */}
+      <div className={`h-full grid gap-3 md:grid-cols-[1fr_300px] px-4 md:px-6 pt-4 transition-opacity duration-300 ${mobileReveal ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+        {/* שמאל: המשחק */}
         <div className="h-full flex flex-col min-h-0">
-          <RoomHeader state={state} me={me} code={code} onLeave={onLeave} onStart={() => socket.emit('startGame', { code })} />
+          <RoomHeader
+            state={state}
+            me={me}
+            code={code}
+            onLeave={onLeave}
+            onStart={() => socket.emit('startGame', { code })}
+          />
           <div className="flex-1 min-h-0">
-            <Table state={state} me={me} onAction={(kind, amount) => socket.emit('action', { code, kind, amount })} />
+            <Table
+              state={state}
+              me={me}
+              onAction={(kind, amount) => socket.emit('action', { code, kind, amount })}
+            />
           </div>
 
-          {/* כפתור לפתיחת צ'אט/היסטוריה במובייל */}
+          {/* כפתור פתיחת צ'אט/היסטוריה במובייל */}
           <div className="md:hidden flex justify-center mt-2 mb-3">
             <button
               className="px-4 py-2 rounded-full bg-white border border-slate-300 shadow text-sm font-medium"
@@ -178,7 +168,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* --- Mobile reveal panel --- */}
+      {/* Mobile overlay — נפתח רק בלחיצה העליונה */}
       {mobileReveal && (
         <div className="md:hidden fixed inset-0 z-[90]">
           <div className="absolute inset-0 bg-black/35" onClick={() => setMobileReveal(false)} />
@@ -192,15 +182,14 @@ export default function App() {
                 סגור
               </button>
             </div>
-
             <div className="p-3 pt-3">
-              <div className="h-[78vh] min-h-0 grid grid-rows-[3fr_2fr] gap-3">
-                <section className="min-h-0 rounded-xl border border-slate-200 overflow-hidden">
+              <div className="h-[78vh] grid grid-rows-[3fr_2fr] gap-3">
+                <section className="rounded-xl border border-slate-200 overflow-hidden">
                   <div className="h-full overflow-y-auto p-2">
                     <Chat chat={chat} onSend={sendChat} />
                   </div>
                 </section>
-                <section className="min-h-0 rounded-xl border border-slate-200 overflow-hidden">
+                <section className="rounded-xl border border-slate-200 overflow-hidden">
                   <div className="h-full overflow-y-auto p-2">
                     <ActivityFeed items={feed} />
                   </div>
