@@ -17,6 +17,8 @@ type WinnerInfo = {
 };
 
 type ChatItem = { from: string; text: string; ts: number };
+type ActionLogItem = string | { ts: number; text: string };
+
 type State = {
   code: string;
   stage: Stage;
@@ -36,7 +38,7 @@ type State = {
   lastWinners?: WinnerInfo[];
   /** אופציונלי: אם הצד שרת כבר מספק לוגים */
   chatLog?: ChatItem[];
-  actionLog?: string[];
+  actionLog?: ActionLogItem[];
 };
 
 /* ---------- תמונות ---------- */
@@ -421,7 +423,7 @@ export default function Table({
 
   // תוכן לצ'אט/היסטוריה
   const [chatLog, setChatLog] = useState<ChatItem[]>(() => state.chatLog ?? []);
-  const [actionLog, setActionLog] = useState<string[]>(() => state.actionLog ?? []);
+  const [actionLog, setActionLog] = useState<ActionLogItem[]>(() => state.actionLog ?? []);
 
   useEffect(() => { if (state.chatLog) setChatLog(state.chatLog); }, [state.chatLog]);
   useEffect(() => { if (state.actionLog) setActionLog(state.actionLog); }, [state.actionLog]);
@@ -434,17 +436,17 @@ export default function Table({
     const onChat = (msg: { from: string; text: string; ts?: number }) => {
       setChatLog(prev => [...prev, { from: msg.from, text: msg.text, ts: msg.ts ?? Date.now() }]);
     };
-    const onHist = (entry: string) => {
+    const onHist = (entry: ActionLogItem) => {
       setActionLog(prev => [...prev, entry]);
     };
 
     // שים לב: שנה לשמות האירועים בפועל אצלך אם צריך
-    sock.on?.('chat:message', onChat);
-    sock.on?.('history:action', onHist);
+    (sock as any).on?.('chat:message', onChat);
+    (sock as any).on?.('history:action', onHist);
 
     return () => {
-      sock.off?.('chat:message', onChat);
-      sock.off?.('history:action', onHist);
+      (sock as any).off?.('chat:message', onChat);
+      (sock as any).off?.('history:action', onHist);
     };
   }, []);
 
@@ -924,9 +926,10 @@ export default function Table({
             <div className="p-3 text-sm text-slate-700 overflow-auto grow space-y-2">
               {actionLog.length === 0 ? (
                 <div className="text-slate-400">אין מהלכים עדיין…</div>
-              ) : actionLog.map((line, i) => (
-                <div key={i}>• {line}</div>
-              ))}
+              ) : actionLog.map((line, i) => {
+                  const txt = typeof line === 'string' ? line : line.text;
+                  return <div key={i}>• {txt}</div>;
+                })}
             </div>
           </div>
         </div>
