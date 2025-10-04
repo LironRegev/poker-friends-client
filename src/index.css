@@ -32,12 +32,4 @@ html, body, #root {
     min-height: 44px;
     min-width: 44px;
   }
-
-  /* חוסם כל פאנל צ'אט/היסטוריה ישן שמופיע מאחורי ה-HERO במובייל */
-  /* (מכסה שמות/איידיז נפוצים כדי לוודא היעלמות מוחלטת במובייל) */
-  #chat, #chat-panel, #mobile-chat, .chat, .chat-panel,
-  #history, #history-panel, #mobile-history, .history, .history-panel,
-  [data-chat], [data-history] {
-    display: none !important;
-  }
 }

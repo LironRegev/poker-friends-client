@@ -34,7 +34,7 @@ type State = {
   revealSeats?: number[];
   lastWinners?: WinnerInfo[];
 
-  /* אופציונלי: מקורות לדראורים החדשים (נתמוך בכל צורה נפוצה) */
+  /* אופציונלי (לשימוש עתידי): */
   actionLog?: Array<string | { ts:number; text:string }>;
   chatLog?: Array<string | { ts?:number; from?:string; text:string }>;
 };
@@ -147,8 +147,7 @@ function FlipIn({
     transformStyle: 'preserve-3d',
     backfaceVisibility: 'hidden' as any,
     willChange: 'transform, opacity',
-    width: '100%',
-    height: '100%',
+    width: '100%', height: '100%',
   };
   return <div style={style}>{children}</div>;
 }
@@ -400,29 +399,34 @@ export default function Table({
   const heroCompact = state.stage === 'showdown';
   const heroTurn = hero ? isSeatTurn(hero.seat) : false;
 
-  /* ====== NEW: שילוב ויזואל בעת העלאה (RAISE/BET) + סאונד ====== */
+  /* ====== Live banner / סאונד ====== */
   const [liveBanner, setLiveBanner] = useState<null | { text: string; key: number }>(null);
   const [potPulse, setPotPulse] = useState(false);
   const [highlightSeat, setHighlightSeat] = useState<number | null>(null);
   const prevBetRef = useRef<number>(state.currentBet);
   const prevStageRef = useRef<Stage>(state.stage);
 
-  // SFX refs
   const turnSfxRef = useRef<HTMLAudioElement | null>(null);
   const raiseSfxRef = useRef<HTMLAudioElement | null>(null);
 
-  // MUTE state (persisted)
   const [showMute, setShowMute] = useState(false);
   const [muteTurn, setMuteTurn] = useState<boolean>(false);
   const [muteRaise, setMuteRaise] = useState<boolean>(false);
 
+  // מובייל: חשיפה בגלילה — כיווץ HERO זמני
+  const [minHero, setMinHero] = useState(false);
+  const openExtras = () => {
+    setMinHero(true);
+    const el = document.getElementById('extras');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  const closeExtras = () => setMinHero(false);
+
   useEffect(() => {
-    // load persisted
     try {
       setMuteTurn(localStorage.getItem('pf_mute_turn') === '1');
       setMuteRaise(localStorage.getItem('pf_mute_raise') === '1');
     } catch {}
-    // init audio
     turnSfxRef.current = new Audio(SFX_TURN);
     raiseSfxRef.current = new Audio(SFX_RAISE);
     if (turnSfxRef.current) { turnSfxRef.current.preload = 'auto'; }
@@ -442,7 +446,6 @@ export default function Table({
     try { a.currentTime = 0; a.play().catch(()=>{}); } catch {}
   };
 
-  // נגן סאונד התור רק כשהופך מ-False ל-True
   const wasHeroTurnRef = useRef<boolean>(false);
   useEffect(() => {
     const was = wasHeroTurnRef.current;
@@ -468,7 +471,7 @@ export default function Table({
       setLiveBanner({ text: txt, key: Date.now() });
       setPotPulse(true);
       setHighlightSeat(state.lastAggressorSeat);
-      playRaise(); // << סאונד צ'יפים על רייז/אול-אין
+      playRaise();
 
       window.setTimeout(() => setPotPulse(false), 650);
       window.setTimeout(() => setHighlightSeat(null), 900);
@@ -479,9 +482,7 @@ export default function Table({
       setLiveBanner(null);
     }
   }, [state.currentBet, state.lastAggressorSeat, state.stage, state.players, currency]); // eslint-disable-line react-hooks/exhaustive-deps
-  /* ====== END NEW ====== */
 
-  // persist mute on change
   useEffect(() => {
     try { localStorage.setItem('pf_mute_turn', muteTurn ? '1':'0'); } catch {}
   }, [muteTurn]);
@@ -547,6 +548,17 @@ export default function Table({
       {/* Live Banner */}
       {liveBanner && <LiveBanner text={liveBanner.text} />}
 
+      {/* פעולות כלליות — מובייל: חשיפת הפאנלים בגלילה */}
+      <div className="flex items-center justify-end gap-2 -mb-1 md:hidden">
+        <button
+          className="px-3 py-1.5 rounded-full border border-slate-300 bg-white hover:bg-slate-50 text-sm"
+          onClick={openExtras}
+          title="גלול לצ׳אט ולהיסטוריית מהלכים"
+        >
+          חשוף צ׳אט/היסטוריה
+        </button>
+      </div>
+
       {/* רצועת שחקנים למעלה */}
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
         {opponents.map((p) => {
@@ -581,7 +593,7 @@ export default function Table({
                 <div className="flex items-center gap-1 ml-auto">
                   {isDealer && <Chip label="D" title="Dealer" />}
                   {isSB && <Chip label="SB" title="Small Blind" />}
-                  {isBB && <Chip label="BB" title="Big Blind" />}
+                  {isBB && <Chip label="BB" />}
                 </div>
               </div>
 
@@ -673,12 +685,13 @@ export default function Table({
 
       {/* HERO + Controls + WinnerBadge */}
       {hero && (
-        <div className={`sticky bottom-0 ${heroCompact ? 'pt-1.5' : 'pt-3'} bg-gradient-to-t from-slate-50 via-slate-50/90 to-transparent`}>
+        <div className={`sticky ${minHero ? 'bottom-auto' : 'bottom-0'} ${heroCompact ? 'pt-1.5' : 'pt-3'} bg-gradient-to-t from-slate-50 via-slate-50/90 to-transparent`}>
           <div className={heroTurn ? 'turn-outline' : ''}>
             <div
               className={[
-                'relative', // חשוב: לעיגון כפתור ה-Mute כמוחלט
+                'relative',
                 'rounded-2xl hero-skin hero-felt',
+                minHero ? 'max-h-[56px] overflow-hidden transition-all duration-300' : '',
                 isSeatWinner(hero.seat)
                   ? (heroCompact ? 'border-2 border-amber-500 bg-amber-50 p-3' : 'border-2 border-amber-500 bg-amber-50 p-5')
                   : !hero.inHand
@@ -689,6 +702,19 @@ export default function Table({
                 (highlightSeat === hero.seat) ? 'outline outline-4 outline-amber-300/70 shadow-lg' : ''
               ].join(' ')}
             >
+              {/* כפתור החזרת ה-HERO במצב מכווץ — מובייל בלבד */}
+              {minHero && (
+                <div className="md:hidden absolute left-3 top-3 z-50">
+                  <button
+                    className="px-2 py-1 rounded-md border border-white/60 bg-white/15 hover:bg-white/25 transition text-white text-sm"
+                    onClick={closeExtras}
+                    title="סגור תצוגה מורחבת"
+                  >
+                    החזר את ה־HERO
+                  </button>
+                </div>
+              )}
+
               {/* HERO styles */}
               <style>{`
                 .hero-felt{
@@ -747,7 +773,7 @@ export default function Table({
                 .num-arrow:active{ transform: translateY(1px); }
               `}</style>
 
-              {/* === כפתור MUTE בפינה (פתיחה למעלה, טקסט שחור) === */}
+              {/* === כפתור MUTE בפינה === */}
               <div className="absolute right-3 top-38 z-50 select-none">
                 <div className="relative">
                   <button
@@ -806,7 +832,7 @@ export default function Table({
                 </div>
               </div>
 
-              {/* קלפי HERO + WinnerBadge (טקסט שחור) */}
+              {/* קלפי HERO + WinnerBadge */}
               <div className="mt-2 flex flex-col items-center gap-3">
                 {hero.hole && hero.hole.length > 0 && (
                   <HeroCards hole={hero.hole} compact={heroCompact} />
