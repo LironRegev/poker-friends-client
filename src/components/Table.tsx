@@ -688,7 +688,7 @@ export default function Table({
             </div>
 
             {/* אזור הקלפים — מוזז מעט שמאלה במובייל */}
-            <div className="absolute inset-x-[12px] inset-y-[6px] rounded-[999px] grid place-items-center">
+            <div className="absolute inset-x-[12px] inset-y-[10px] rounded-[999px] grid place-items-center">
               <BoardCards community={state.community} winOverlay={winOverlay} />
             </div>
           </div>
