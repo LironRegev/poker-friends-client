@@ -146,7 +146,7 @@ function FlipIn({
   return <div style={style}>{children}</div>;
 }
 
-/** חשיפת קלפי קהילה (deal) – חלק */
+/** חשיפת קלפי קהילה (deal) – מלמטה למעלה */
 function AnimatedFace({
   children,
   delayMs = 0,
@@ -160,7 +160,7 @@ function AnimatedFace({
   const style: React.CSSProperties = {
     transition: `opacity 700ms cubic-bezier(0.22,1,0.36,1) ${delayMs}ms, transform 700ms cubic-bezier(0.22,1,0.36,1) ${delayMs}ms`,
     opacity: visible ? 1 : 0,
-    transform: visible ? 'translate3d(0,0,0)' : 'translate3d(0,16px,0)',
+    transform: visible ? 'translate3d(0,0,0)' : 'translate3d(0,24px,0)', // מעט יותר גובה ל"הרמה"
     willChange: 'transform, opacity',
     width: '100%',
     height: '100%',
@@ -919,7 +919,10 @@ function BoardCards({
   const [delays, setDelays] = useState<number[]>([0,0,0,0,0]);
 
   const isDesktop = useIsDesktop();
-  const ghostY = isDesktop ? -43 : -45; // <<< במובייל נשאר גבוה, בדסקטופ עדין כדי שלא ייחתך
+  const ghostY = isDesktop ? -43 : -45; // ghost של קלף שמוחלף
+
+  // === קבוע השהייה בין קלפי הפלופ (השמאלי מתחיל)
+  const REVEAL_GAP_MS = 520;
 
   useEffect(() => {
     setAppearKeys(prev => {
@@ -936,7 +939,9 @@ function BoardCards({
     const prevLen = prevLenRef.current;
     const curLen = community.filter(Boolean).length;
     const d = [0,0,0,0,0];
-    if (prevLen === 0 && curLen >= 3) { d[0]=0; d[1]=350; d[2]=700; }
+    // פלופ: שמאלי קודם, כל REVEAL_GAP_MS
+    if (prevLen === 0 && curLen >= 3) { d[0]=0; d[1]=REVEAL_GAP_MS; d[2]=REVEAL_GAP_MS*2; }
+    // טרן/ריבר: יחיד, בלי השהייה נוספת
     else if (prevLen === 3 && curLen === 4) { d[3]=0; }
     else if (prevLen === 4 && curLen === 5) { d[4]=0; }
     setDelays(d);
@@ -980,7 +985,7 @@ function BoardCards({
 
         const wrapperClasses = [
           "relative",
-          "w-[68px] h-[102px] md:w-[80px] md:h-[124px]", // md: 124px במקום 120px
+          "w-[68px] h-[102px] md:w-[80px] md:h-[124px]",
           "rounded-[0.3rem]",
           goldBoard ? "ring-2 ring-amber-400 ring-offset-[3px] ring-offset-[#5a463a]" : "",
           "overflow-visible",
@@ -998,18 +1003,23 @@ function BoardCards({
 
         return (
           <div key={i} className={wrapperClasses}>
-            <div style={ghostStyle}>
-              {c ? (
+            {/* בסיס קבוע: גב קלף תמיד נוכח → אין "רגע ריק" */}
+            <div className="absolute inset-0">
+              <BackImg className="opacity-60" />
+            </div>
+
+            {/* הקלף הנוכחי על הלוח (כולל ghost-lift כשצריך), נכנס מלמטה למעלה */}
+            {c && (
+              <div className="absolute inset-0" style={ghostStyle}>
                 <AnimatedFace key={faceKey} delayMs={delays[i]}>
                   <div className="w-full h-full rounded-[0.3rem] shadow-[0_8px_16px_rgba(0,0,0,0.35)]">
                     <CardImg card={c} />
                   </div>
                 </AnimatedFace>
-              ) : (
-                <BackImg className="opacity-60" />
-              )}
-            </div>
+              </div>
+            )}
 
+            {/* קלף שנכנס ומחליף בזמן SHOWDOWN (נכנס מלמטה) */}
             {enterCard && (
               <div className="absolute inset-0">
                 <SlideIn>
