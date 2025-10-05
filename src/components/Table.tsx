@@ -64,6 +64,9 @@ function CardImg({ card }:{ card: Card }) {
       src={src}
       alt={alt}
       className="w-full h-full object-contain"
+      decoding="async"
+      loading="eager"
+      fetchPriority="high"
       onError={(e)=>{
         const img = e.currentTarget as HTMLImageElement;
         if (!img.dataset.fallback) {
@@ -160,8 +163,11 @@ function AnimatedFace({
   const style: React.CSSProperties = {
     transition: `opacity 700ms cubic-bezier(0.22,1,0.36,1) ${delayMs}ms, transform 700ms cubic-bezier(0.22,1,0.36,1) ${delayMs}ms`,
     opacity: visible ? 1 : 0,
-    transform: visible ? 'translate3d(0,0,0)' : 'translate3d(0,24px,0)', // מעט יותר גובה ל"הרמה"
+    transform: visible ? 'translate3d(0,0,0)' : 'translate3d(0,24px,0)',
     willChange: 'transform, opacity',
+    backfaceVisibility: 'hidden',
+    WebkitBackfaceVisibility: 'hidden' as any,
+    transformStyle: 'preserve-3d',
     width: '100%',
     height: '100%',
   };
@@ -913,41 +919,68 @@ function BoardCards({
     ENTER_MS: number;
   };
 }) {
-  const prevRef = useRef<(Card | undefined)[]>([]);
-  const [appearKeys, setAppearKeys] = useState<number[]>([0,0,0,0,0]);
-  const prevLenRef = useRef(0);
-  const [delays, setDelays] = useState<number[]>([0,0,0,0,0]);
+  // ---------- שער חשיפה אחרי decode ----------
+  const [displayed, setDisplayed] = useState<Array<Card | undefined>>([undefined,undefined,undefined,undefined,undefined]);
+  const sigFor = (c?: Card) => (c ? `${c.suit}-${c.rank}` : '');
+  const prevSigRef = useRef<string[]>(['','','','','']);
 
-  const isDesktop = useIsDesktop();
-  const ghostY = isDesktop ? -43 : -45; // ghost של קלף שמוחלף
-
-  // === קבוע השהייה בין קלפי הפלופ (השמאלי מתחיל)
+  // השהיה בין פלופ לשכנים (השמאלי קודם)
   const REVEAL_GAP_MS = 520;
 
-  useEffect(() => {
-    setAppearKeys(prev => {
-      const next = [...prev];
-      for (let i = 0; i < 5; i++) {
-        const hadBefore = !!prevRef.current[i];
-        const hasNow = !!community[i];
-        if (!hadBefore && hasNow) next[i] = (next[i] || 0) + 1;
-      }
-      prevRef.current = [...community];
-      return next;
-    });
+  // טעינת תמונה ו-decode עם פולבק קצר
+  const preloadOne = (c: Card) => {
+    const src = `/cards/${suitToWord(c.suit)}${rankToWord(c.rank)}.png`;
+    const img = new Image();
+    (img as any).decoding = 'async';
+    img.src = src;
+    const timeout = new Promise<void>(res => setTimeout(res, 250));
+    const decoded = ('decode' in img) ? (img as any).decode().then(()=>undefined, ()=>undefined) : Promise.resolve();
+    return Promise.race([decoded, timeout]);
+  };
 
-    const prevLen = prevLenRef.current;
-    const curLen = community.filter(Boolean).length;
-    const d = [0,0,0,0,0];
-    // פלופ: שמאלי קודם, כל REVEAL_GAP_MS
-    if (prevLen === 0 && curLen >= 3) { d[0]=0; d[1]=REVEAL_GAP_MS; d[2]=REVEAL_GAP_MS*2; }
-    // טרן/ריבר: יחיד, בלי השהייה נוספת
-    else if (prevLen === 3 && curLen === 4) { d[3]=0; }
-    else if (prevLen === 4 && curLen === 5) { d[4]=0; }
-    setDelays(d);
-    prevLenRef.current = curLen;
+  useEffect(() => {
+    const curCount = community.filter(Boolean).length;
+    const wasEmpty = prevSigRef.current.every(s => !s);
+    const isFlopBurst = wasEmpty && curCount >= 3 && community[0] && community[1] && community[2];
+
+    for (let i = 0; i < 5; i++) {
+      const c = community[i];
+      const sig = sigFor(c);
+      const prevSig = prevSigRef.current[i];
+
+      // קלף חדש נכנס לסלוט
+      if (c && sig !== prevSig) {
+        const delay =
+          isFlopBurst
+            ? (i === 0 ? 0 : i === 1 ? REVEAL_GAP_MS : i === 2 ? REVEAL_GAP_MS*2 : 0)
+            : 0;
+
+        preloadOne(c).then(() =>
+          new Promise<void>(res => setTimeout(res, delay)).then(() => {
+            setDisplayed(prev => {
+              const clone = [...prev];
+              clone[i] = c;
+              return clone;
+            });
+          })
+        );
+      }
+
+      // קלף נעלם (תחילת יד חדשה)
+      if (!c && prevSig) {
+        setDisplayed(prev => {
+          const clone = [...prev];
+          clone[i] = undefined;
+          return clone;
+        });
+      }
+    }
+
+    // עדכן חתימות לאחר סריקה
+    prevSigRef.current = community.map(sigFor);
   }, [community]);
 
+  // ---------- אפקט המחליף (מנצח/SHOWDOWN) ----------
   const [phase, setPhase] = useState<'idle'|'fall'|'enter'|'hold'>('idle');
   const sigRef = useRef<string>('none');
   useEffect(() => {
@@ -970,12 +1003,13 @@ function BoardCards({
 
   const falling = new Set(winOverlay?.replaceIdxs ?? []);
   const used    = new Set(winOverlay?.usedBoardIdxs ?? []);
+  const ghostY  = -40; // אחיד לכל הפלטפורמות
 
   return (
     <div className="flex items-center justify-center gap-1.5 md:gap-2 overflow-visible">
       {Array.from({ length: 5 }).map((_, i) => {
-        const c = community[i];
-        const faceKey = `face-${i}-${appearKeys[i]}`;
+        const c = displayed[i]; // ← נחשף רק אחרי decode
+        const faceKey = c ? `board-${i}-${c.suit}-${c.rank}` : `board-empty-${i}`;
 
         const ghosted   = !!winOverlay && phase !== 'idle' && falling.has(i);
         const animateNow= !!winOverlay && phase === 'fall' && falling.has(i);
@@ -1008,10 +1042,10 @@ function BoardCards({
               <BackImg className="opacity-60" />
             </div>
 
-            {/* הקלף הנוכחי על הלוח (כולל ghost-lift כשצריך), נכנס מלמטה למעלה */}
+            {/* הקלף הנוכחי על הלוח (נכנס מלמטה למעלה) */}
             {c && (
               <div className="absolute inset-0" style={ghostStyle}>
-                <AnimatedFace key={faceKey} delayMs={delays[i]}>
+                <AnimatedFace key={faceKey} delayMs={0 /* הסטאגר נעשה לפני החשיפה */}>
                   <div className="w-full h-full rounded-[0.3rem] shadow-[0_8px_16px_rgba(0,0,0,0.35)]">
                     <CardImg card={c} />
                   </div>
@@ -1019,7 +1053,7 @@ function BoardCards({
               </div>
             )}
 
-            {/* קלף שנכנס ומחליף בזמן SHOWDOWN (נכנס מלמטה) */}
+            {/* קלף שנכנס כמחליף (SHOWDOWN) */}
             {enterCard && (
               <div className="absolute inset-0">
                 <SlideIn>
