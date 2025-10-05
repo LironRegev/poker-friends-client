@@ -56,6 +56,22 @@ const rankToWord = (r: number) => {
 
 const fileForCard = (c: Card) => `${suitToWord(c.suit)}${rankToWord(c.rank)}.png`;
 
+// פרילוד לתמונת קלף → מונע "קפיצה" רגעית לפני שהקובץ מגיע מהשרת/CDN
+function preloadCardImage(card: Card): Promise<void> {
+  return new Promise((resolve) => {
+    const src = `${CARD_DIR}/${fileForCard(card)}`;
+    const img = new Image();
+    const done = () => resolve();
+    img.onload = done;
+    img.onerror = done;
+    img.src = src;
+    // ביטוח קטן נגד אירוע שלא יורה:
+    setTimeout(done, 1200);
+  });
+}
+
+const sigFor = (c?: Card) => (c ? `${c.rank}${c.suit}` : '');
+
 function CardImg({ card }:{ card: Card }) {
   const src = `${CARD_DIR}/${fileForCard(card)}`;
   const alt = `${suitToWord(card.suit)}${rankToWord(card.rank)}`;
@@ -64,9 +80,6 @@ function CardImg({ card }:{ card: Card }) {
       src={src}
       alt={alt}
       className="w-full h-full object-contain"
-      decoding="async"
-      loading="eager"
-      fetchPriority="high"
       onError={(e)=>{
         const img = e.currentTarget as HTMLImageElement;
         if (!img.dataset.fallback) {
@@ -165,9 +178,6 @@ function AnimatedFace({
     opacity: visible ? 1 : 0,
     transform: visible ? 'translate3d(0,0,0)' : 'translate3d(0,24px,0)',
     willChange: 'transform, opacity',
-    backfaceVisibility: 'hidden',
-    WebkitBackfaceVisibility: 'hidden' as any,
-    transformStyle: 'preserve-3d',
     width: '100%',
     height: '100%',
   };
@@ -919,29 +929,29 @@ function BoardCards({
     ENTER_MS: number;
   };
 }) {
-  // ---------- שער חשיפה אחרי decode ----------
-  const [displayed, setDisplayed] = useState<Array<Card | undefined>>([undefined,undefined,undefined,undefined,undefined]);
-  const sigFor = (c?: Card) => (c ? `${c.suit}-${c.rank}` : '');
+  // נשמור מה כרגע מוצג בפועל (אחרי פרילוד + דיליי), כדי שלא יהיה רגע "ריק"
+  const [displayed, setDisplayed] = useState<Array<Card | undefined>>([undefined, undefined, undefined, undefined, undefined]);
+  // חתימות הקודמות כדי לזהות קלף חדש/החלפה
   const prevSigRef = useRef<string[]>(['','','','','']);
 
-  // השהיה בין פלופ לשכנים (השמאלי קודם)
-  const REVEAL_GAP_MS = 520;
+  const isDesktop = useIsDesktop();
+  const ghostY = isDesktop ? -43 : -45; // ghost של קלף שמוחלף
 
-  // טעינת תמונה ו-decode עם פולבק קצר
-  const preloadOne = (c: Card) => {
-    const src = `/cards/${suitToWord(c.suit)}${rankToWord(c.rank)}.png`;
-    const img = new Image();
-    (img as any).decoding = 'async';
-    img.src = src;
-    const timeout = new Promise<void>(res => setTimeout(res, 250));
-    const decoded = ('decode' in img) ? (img as any).decode().then(()=>undefined, ()=>undefined) : Promise.resolve();
-    return Promise.race([decoded, timeout]);
-  };
+  // === קבועי חשיפה ===
+  const REVEAL_GAP_MS = 520;        // פלופ: מרווח בין השמאלי לאמצעי לימני
+  const TURN_RIVER_DELAY_MS = 520;  // טרן/ריבר: השהיה קלה לפני החשיפה
 
+  // עם שינוי בקהילה: פרילוד + תזמון סטאגר
   useEffect(() => {
-    const curCount = community.filter(Boolean).length;
+    const curCount  = community.filter(Boolean).length;
+    const prevCount = prevSigRef.current.filter(Boolean).length;
+
     const wasEmpty = prevSigRef.current.every(s => !s);
-    const isFlopBurst = wasEmpty && curCount >= 3 && community[0] && community[1] && community[2];
+    const isFlopBurst  = wasEmpty && curCount >= 3 && community[0] && community[1] && community[2];
+    const isTurnReveal = prevCount === 3 && curCount === 4;
+    const isRiverReveal= prevCount === 4 && curCount === 5;
+
+    const tasks: Promise<void>[] = [];
 
     for (let i = 0; i < 5; i++) {
       const c = community[i];
@@ -950,12 +960,17 @@ function BoardCards({
 
       // קלף חדש נכנס לסלוט
       if (c && sig !== prevSig) {
-        const delay =
-          isFlopBurst
-            ? (i === 0 ? 0 : i === 1 ? REVEAL_GAP_MS : i === 2 ? REVEAL_GAP_MS*2 : 0)
-            : 0;
+        let delay = 0;
 
-        preloadOne(c).then(() =>
+        if (isFlopBurst) {
+          // שמאלי → אמצעי → ימני
+          delay = i === 0 ? 0 : i === 1 ? REVEAL_GAP_MS : i === 2 ? REVEAL_GAP_MS * 2 : 0;
+        } else if ((isTurnReveal && i === 3) || (isRiverReveal && i === 4)) {
+          // טרן או ריבר (קלף יחיד)
+          delay = TURN_RIVER_DELAY_MS;
+        }
+
+        const t = preloadCardImage(c).then(() =>
           new Promise<void>(res => setTimeout(res, delay)).then(() => {
             setDisplayed(prev => {
               const clone = [...prev];
@@ -964,9 +979,10 @@ function BoardCards({
             });
           })
         );
+        tasks.push(t);
       }
 
-      // קלף נעלם (תחילת יד חדשה)
+      // קלף נעלם (תחילת יד חדשה או ניקוי)
       if (!c && prevSig) {
         setDisplayed(prev => {
           const clone = [...prev];
@@ -976,19 +992,19 @@ function BoardCards({
       }
     }
 
-    // עדכן חתימות לאחר סריקה
+    // עדכון "חתימות" לאחר הסבב
     prevSigRef.current = community.map(sigFor);
   }, [community]);
 
-  // ---------- אפקט המחליף (מנצח/SHOWDOWN) ----------
+  // שלבי אפקט המנצח (נפילה/כניסה)
   const [phase, setPhase] = useState<'idle'|'fall'|'enter'|'hold'>('idle');
-  const sigRef = useRef<string>('none');
+  const sigOverlayRef = useRef<string>('none');
   useEffect(() => {
     const sig = winOverlay
       ? JSON.stringify({ b: winOverlay.usedBoardIdxs, r: winOverlay.replaceIdxs, e: Object.values(winOverlay.enteringMap).map(c=>`${c.rank}${c.suit}`) })
       : 'none';
-    if (sigRef.current === sig) return;
-    sigRef.current = sig;
+    if (sigOverlayRef.current === sig) return;
+    sigOverlayRef.current = sig;
 
     if (!winOverlay || winOverlay.replaceIdxs.length === 0) {
       setPhase('idle');
@@ -1003,13 +1019,12 @@ function BoardCards({
 
   const falling = new Set(winOverlay?.replaceIdxs ?? []);
   const used    = new Set(winOverlay?.usedBoardIdxs ?? []);
-  const ghostY  = -40; // אחיד לכל הפלטפורמות
 
   return (
     <div className="flex items-center justify-center gap-1.5 md:gap-2 overflow-visible">
       {Array.from({ length: 5 }).map((_, i) => {
-        const c = displayed[i]; // ← נחשף רק אחרי decode
-        const faceKey = c ? `board-${i}-${c.suit}-${c.rank}` : `board-empty-${i}`;
+        const c = displayed[i]; // נשתמש במה ש"באמת" מוצג כרגע (אחרי פרילוד+דיליי)
+        const keySig = sigFor(c); // ייצור key חדש כדי להפעיל את האנימציה
 
         const ghosted   = !!winOverlay && phase !== 'idle' && falling.has(i);
         const animateNow= !!winOverlay && phase === 'fall' && falling.has(i);
@@ -1042,10 +1057,10 @@ function BoardCards({
               <BackImg className="opacity-60" />
             </div>
 
-            {/* הקלף הנוכחי על הלוח (נכנס מלמטה למעלה) */}
+            {/* הקלף הנוכחי על הלוח (כולל ghost-lift כשצריך), נכנס מלמטה למעלה */}
             {c && (
               <div className="absolute inset-0" style={ghostStyle}>
-                <AnimatedFace key={faceKey} delayMs={0 /* הסטאגר נעשה לפני החשיפה */}>
+                <AnimatedFace key={`face-${i}-${keySig}`} delayMs={0}>
                   <div className="w-full h-full rounded-[0.3rem] shadow-[0_8px_16px_rgba(0,0,0,0.35)]">
                     <CardImg card={c} />
                   </div>
@@ -1053,7 +1068,7 @@ function BoardCards({
               </div>
             )}
 
-            {/* קלף שנכנס כמחליף (SHOWDOWN) */}
+            {/* קלף שנכנס ומחליף בזמן SHOWDOWN (נכנס מלמטה) */}
             {enterCard && (
               <div className="absolute inset-0">
                 <SlideIn>
