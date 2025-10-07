@@ -37,12 +37,66 @@ export default function App() {
   const [mobileReveal, setMobileReveal] = useState(false);
   const prevStateRef = useRef<State | null>(null);
 
+  // ---------- סטטוס חיבור + באנר ----------
+  const [conn, setConn] = useState<{ status: 'connected'|'disconnected'|'reconnecting'; reason?: string }>(
+    { status: socket.connected ? 'connected' : 'disconnected' }
+  );
+
   function requestPrivateState(roomCode?: string, fallback?: State) {
     const c = roomCode || code;
     if (!c) { if (fallback) setState(fallback); return; }
     socket.emit('getState', { code: c }, (res: any) => {
       if (res?.state) setState(res.state as State);
       else if (fallback) setState(fallback);
+    });
+  }
+
+  // נסיון הצטרפות מחדש לחדר רק אם אנחנו חסרים (לא נוגעים בסטאק אם אנחנו קיימים)
+  function rejoinIfMissing(roomCode?: string) {
+    const c = roomCode || code;
+    if (!c || !me.name) return;
+
+    socket.emit('getState', { code: c }, (res: any) => {
+      const s: State | undefined = res?.state;
+      const alreadyIn = !!s?.players?.some(p => p.name === me.name);
+      if (alreadyIn) {
+        // אנחנו בפנים — רק למשוך מצב פרטי מלא
+        requestPrivateState(c, s);
+        return;
+      }
+      // לא בפנים — מצטרפים עם ה-stack האחרון שידוע לנו מה-state הקודם (לא מה-me!)
+      const lastKnown = prevStateRef.current?.players?.find(p => p.name === me.name)?.stack;
+      const desiredStack = Number.isFinite(lastKnown as any) ? Number(lastKnown) : me.stack;
+
+      console.log('[rejoin] joining again with lastKnown stack =', desiredStack, 'name=', me.name, 'code=', c);
+      socket.emit('joinRoom', { code: c, name: me.name, stack: desiredStack }, (ack: any) => {
+        if (ack?.error) {
+          console.log('[rejoin] joinRoom error:', ack.error);
+          // אפילו אם יש שגיאה (למשל name in use) — ננסה למשוך סטייט פרטי כדי להסתנכרן
+          requestPrivateState(c);
+          return;
+        }
+        if (ack?.state) setState(ack.state as State);
+        requestPrivateState(c, ack?.state);
+      });
+    });
+  }
+
+  // חדש: נסיון resume (קישור socket.id חדש לאותו שחקן לפי שם). אם נכשל — ננסה rejoinIfMissing.
+  function resumeOrRejoin(roomCode?: string) {
+    const c = roomCode || code;
+    if (!c || !me.name) return;
+
+    console.log('[resume] trying resumeSession', { code: c, name: me.name });
+    socket.emit('resumeSession', { code: c, name: me.name }, (ack: any) => {
+      if (ack?.state) {
+        console.log('[resume] success');
+        setState(ack.state as State);
+        requestPrivateState(c, ack.state);
+      } else {
+        console.log('[resume] not found, fallback to rejoinIfMissing');
+        rejoinIfMissing(c);
+      }
     });
   }
 
@@ -59,18 +113,57 @@ export default function App() {
       });
     };
     const onChat = (m: { name: string; text: string; ts: number }) => setChat(prev => [...prev, m]);
-    const onConnect = () => { if (code) requestPrivateState(code, state || undefined); };
+
+    const onConnect = () => {
+      console.log('[App] connect', socket.id);
+      setConn({ status: 'connected' });
+      if (code) resumeOrRejoin(code); // <-- במקום רק rejoinIfMissing
+    };
+
+    const onDisconnect = (reason: any) => {
+      console.log('[App] disconnect reason =', reason);
+      setConn({ status: 'disconnected', reason: String(reason || '') });
+    };
+
+    const onReconnectAttempt = () => {
+      setConn({ status: 'reconnecting' });
+    };
+    const onReconnect = () => {
+      console.log('[App] reconnect', socket.id);
+      setConn({ status: 'connected' });
+      if (code) resumeOrRejoin(code); // <-- תמיד ננסה resume קודם
+    };
+    const onReconnectError = (e: any) => {
+      console.log('[App] reconnect_error', e);
+      setConn({ status: 'disconnected', reason: 'reconnect_error' });
+    };
+    const onConnectError = (e: any) => {
+      console.log('[App] connect_error', e?.message || e);
+      setConn({ status: 'disconnected', reason: e?.message || 'connect_error' });
+    };
+
     socket.on('state', onState);
     socket.on('chat', onChat);
     socket.on('connect', onConnect);
-    socket.on('reconnect', onConnect as any);
+    socket.on('disconnect', onDisconnect);
+    socket.on('reconnect', onReconnect as any);
+    socket.on('connect_error', onConnectError as any);
+    socket.io.on('reconnect_attempt', onReconnectAttempt);
+    socket.io.on('reconnect', onReconnect as any);
+    socket.io.on('reconnect_error', onReconnectError as any);
+
     return () => {
       socket.off('state', onState);
       socket.off('chat', onChat);
       socket.off('connect', onConnect);
-      socket.off('reconnect', onConnect as any);
+      socket.off('disconnect', onDisconnect);
+      socket.off('reconnect', onReconnect as any);
+      socket.off('connect_error', onConnectError as any);
+      socket.io.off('reconnect_attempt', onReconnectAttempt);
+      socket.io.off('reconnect', onReconnect as any);
+      socket.io.off('reconnect_error', onReconnectError as any);
     };
-  }, [socket, code, state]);
+  }, [socket, code, me.name, me.stack]);
 
   function onCreateRoom(settings: RoomSettings) {
     setMe(prev => ({ ...prev, stack: settings.buyInDefault }));
@@ -127,10 +220,25 @@ export default function App() {
     try { document.documentElement.style.overflow = ''; document.body.style.overflow = ''; } catch {}
   };
 
+  // כפתור Reconnect ידני
+  const manualReconnect = () => {
+    if (!socket.connected) {
+      console.log('[App] manual reconnect');
+      setConn({ status: 'reconnecting' });
+      socket.connect();
+      // on('connect') כבר יבצע resumeOrRejoin
+    } else if (code) {
+      // כבר מחובר — לוודא סנכרון
+      resumeOrRejoin(code);
+    }
+  };
+
   if (!state) {
     return (
       <>
         <div className="fixed inset-0 -z-10" style={casinoFloorStyle} />
+        {/* באנר חיבור גם במסך הלובי */}
+        <ConnectionBanner conn={conn} onReconnect={manualReconnect} />
         <Lobby me={me} setMe={setMe} code={code} setCode={setCode} onCreateRoom={onCreateRoom} onJoinRoom={onJoinRoom} />
       </>
     );
@@ -139,6 +247,9 @@ export default function App() {
   return (
     <div className="h-screen">
       <div className="fixed inset-0 -z-10" style={casinoFloorStyle} />
+
+      {/* באנר חיבור */}
+      <ConnectionBanner conn={conn} onReconnect={manualReconnect} />
 
       {/* תוכן ראשי – מוסתר בזמן פתיחת הצ'אט במובייל */}
       <div className={`h-full grid gap-3 md:grid-cols-[1fr_300px] px-4 md:px-6 pt-4 transition-opacity duration-200 ${mobileReveal ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
@@ -213,6 +324,36 @@ export default function App() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ====== באנר חיבור קטן למעלה ====== */
+function ConnectionBanner({
+  conn,
+  onReconnect
+}:{
+  conn: { status:'connected'|'disconnected'|'reconnecting'; reason?: string };
+  onReconnect: () => void;
+}) {
+  if (conn.status === 'connected') return null;
+  const text =
+    conn.status === 'reconnecting'
+      ? 'Reconnecting…'
+      : (conn.reason ? `Disconnected (${conn.reason})` : 'Disconnected');
+
+  return (
+    <div className="fixed top-2 inset-x-0 z-[1000] flex justify-center">
+      <div className="flex items-center gap-3 rounded-full border px-3 py-1.5 shadow
+                      border-amber-300 bg-amber-100/90 text-amber-900">
+        <span className="font-semibold">{text}</span>
+        <button
+          className="px-3 py-1 rounded-full bg-white border border-amber-300 hover:bg-amber-50 text-sm"
+          onClick={onReconnect}
+        >
+          Reconnect
+        </button>
+      </div>
     </div>
   );
 }
