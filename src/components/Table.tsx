@@ -841,7 +841,7 @@ export default function Table({
               </div>
               {/* === סוף כפתור MUTE === */}
 
-              <div className="flex items_center justify_between">
+              <div className="flex items-center justify-between">
                 {/* ⬇️ כאן שינוי ה-P/L בלבד (גדול יותר + ירוק בהיר יותר לרווח) */}
                 <div className="flex items-center gap-3">
                   <div className="font-semibold">{hero.name}</div>
