@@ -798,7 +798,7 @@ export default function Table({
               `}</style>
 
               {/* === כפתור MUTE בפינה === */}
-              <div className="absolute right-3 top-3 z-50 select-none">
+              <div className="absolute right-3 top-[150px] z-50 select-none">
                 <div className="relative">
                   <button
                     className="rounded-full p-2 border border-white/60 bg-white/15 hover:bg-white/25 transition"
