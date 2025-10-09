@@ -9,6 +9,7 @@ type Player = {
   id: string; name: string; stack: number; seat: number;
   inHand: boolean; hasActedThisRound: boolean; isAllIn: boolean;
   isOwner?: boolean; holeCount?: number; hole?: Card[]; publicHole?: Card[];
+  entryStack?: number; // ⬅️ חדש
 };
 type Stage = 'waiting'|'preflop'|'flop'|'turn'|'river'|'showdown';
 
@@ -826,10 +827,31 @@ export default function Table({
               {/* === סוף כפתור MUTE === */}
 
               <div className="flex items-center justify-between">
+                {/* ⬇️ כאן שינוי ה-P/L בלבד (גדול יותר + ירוק בהיר יותר לרווח) */}
                 <div className="flex items-center gap-3">
                   <div className="font-semibold">{hero.name}</div>
                   <div>{currency}{hero.stack}</div>
+
+                  {typeof hero.entryStack === 'number' && (
+                    <div className="ml-2 flex items-center gap-2 text-sm">
+                      <span className="opacity-80">Entry</span>
+                      <span className="font-semibold">{currency}{hero.entryStack}</span>
+                      {(() => {
+                        const pl = hero.stack - (hero.entryStack ?? 0);
+                        const cls =
+                          pl > 0 ? 'bg-emerald-400/25 text-emerald-50' :   // ⬅️ בהיר יותר
+                          pl < 0 ? 'bg-rose-600/25 text-rose-50' :
+                                   'bg-slate-500/25 text-slate-50';
+                        return (
+                          <span className={`px-3 py-1 rounded-full ${cls}`}>
+                            {pl > 0 ? '+' : ''}{pl}
+                          </span>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </div>
+
                 <div className="flex items-center gap-2">
                   <div className="text-xs text-white/80">Seat {hero.seat+1}</div>
                   <div className="flex items-center gap-1">

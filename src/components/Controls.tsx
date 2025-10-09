@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { getSocket } from '../api/socket';
 
 type Card = { rank:number; suit:'♣'|'♦'|'♥'|'♠' };
@@ -122,6 +122,7 @@ export default function Controls({
     const toCallExact = Math.max(0, state.currentBet - contributed);
     if (autoCheck && toCallExact === 0) {
       onAction('check');
+      setAutoCheck(false); // ⬅️ נכבה מיד אחרי ביצוע check אוטומטי
       return;
     }
     if (autoFold && toCallExact > 0) {
@@ -129,6 +130,21 @@ export default function Controls({
       return;
     }
   }, [myTurn, state.currentBet, contributed, autoCheck, autoFold, onAction]);
+
+  // כיבוי Auto-Check כשהתור שלי מסתיים (turnSeat זז ממני)
+  const mySeat = useMemo(() => {
+    const meP = state.players.find(p => p.name === me.name);
+    return meP?.seat ?? -1;
+  }, [state.players, me.name]);
+
+  const prevTurnRef = useRef(state.turnSeat);
+  useEffect(() => {
+    const prev = prevTurnRef.current;
+    if (prev === mySeat && state.turnSeat !== mySeat) {
+      setAutoCheck(false);
+    }
+    prevTurnRef.current = state.turnSeat;
+  }, [state.turnSeat, mySeat]);
 
   // איפוס אוטומטי ברגע שהיד מסתיימת/מצב לא-אקטיבי
   useEffect(() => {
@@ -213,12 +229,12 @@ export default function Controls({
 
             {/* Check ל-BB בפרה-פלופ כשאין העלאה */}
             {showBBCheckPreflop && (
-              <button className={`${btn} ${outline}`} onClick={()=> onAction('check')}>Check</button>
+              <button className={`${btn} ${outline}`} onClick={()=> { setAutoCheck(false); onAction('check'); }}>Check</button>
             )}
 
             {/* Check גנרי */}
             {!showBBCheckPreflop && canGenericCheck && (
-              <button className={`${btn} ${outline}`} onClick={()=> onAction('check')}>Check</button>
+              <button className={`${btn} ${outline}`} onClick={()=> { setAutoCheck(false); onAction('check'); }}>Check</button>
             )}
 
             {/* CALL (מציג סכום + טולטיפ מדויק) */}

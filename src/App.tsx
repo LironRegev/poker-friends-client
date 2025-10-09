@@ -102,6 +102,9 @@ export default function App() {
 
   useEffect(() => {
     const onState = (s: State) => {
+      // ✅ חשוב: אם יצאנו מהחדר/או זה לא אותו קוד — לא לעבד את האירוע
+      if (!code || s.code !== code) return;
+
       socket.emit('getState', { code: s.code }, (res: any) => {
         const ns: State = (res?.state as State) ?? s;
         if (Array.isArray(ns.actionLog)) {
@@ -190,6 +193,7 @@ export default function App() {
 
   function onLeave() {
     socket.emit('leaveRoom', { code });
+    setCode('');        // ⬅️ קריטי: אין חדר פעיל → נחזור ללובי
     setState(null);
     setChat([]);
     setFeed([]);
