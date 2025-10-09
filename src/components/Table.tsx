@@ -798,7 +798,7 @@ export default function Table({
               `}</style>
 
               {/* === כפתור MUTE בפינה === */}
-              <div className="absolute right-3 top-38 z-50 select-none">
+              <div className="absolute right-3 top-3 z-50 select-none">
                 <div className="relative">
                   <button
                     className="rounded-full p-2 border border-white/60 bg-white/15 hover:bg-white/25 transition"
@@ -808,7 +808,7 @@ export default function Table({
                     <span aria-hidden>{(muteTurn || muteRaise) ? '🔇' : '🔊'}</span>
                   </button>
                   {showMute && (
-                    <div className="force-dark absolute right-0 bottom_full mb-2 w-56 bg-white border border-slate-200 rounded-xl shadow p-3">
+                    <div className="force-dark absolute right-0 bottom-full mb-2 w-56 bg-white border border-slate-200 rounded-xl shadow p-3">
                       <div className="text-sm font-bold mb-2">השתקת צלילים</div>
                       <label className="flex items-center gap-2 text-sm">
                         <input
