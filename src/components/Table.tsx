@@ -67,7 +67,6 @@ function preloadCardImage(card: Card): Promise<void> {
     img.onload = done;
     img.onerror = done;
     img.src = src;
-    // ביטוח קטן נגד אירוע שלא יורה:
     setTimeout(done, 1200);
   });
 }
@@ -655,6 +654,21 @@ export default function Table({
                   })}
                 </div>
               )}
+
+              {/* ⬅️ חדש: באנר Winner/Loser גם בגריד בזמן showdown */}
+              {state.lastWinners && state.lastWinners.length > 0 && state.stage === 'showdown' && (
+                <div className="mt-2 flex justify-center">
+                  {isWinner ? (
+                    <div className="winner-text-force">
+                      <GridWinnerBadge />
+                    </div>
+                  ) : (
+                    <div className="winner-text-force">
+                      <GridLoserBadge />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
@@ -707,7 +721,7 @@ export default function Table({
         ) : null}
       </div>
 
-      {/* HERO + Controls + WinnerBadge — מרונדר רק כשלא במצב חשיפה */}
+      {/* HERO + Controls + Winner/Loser — מרונדר רק כשלא במצב חשיפה */}
       {hero && !minHero && (
         <div className={`sticky bottom-0 ${heroCompact ? 'pt-1.5' : 'pt-3'} bg-gradient-to-t from-slate-50 via-slate-50/90 to-transparent z-[60]`}>
           <div className={heroTurn ? 'turn-outline' : ''}>
@@ -758,8 +772,8 @@ export default function Table({
                 .hero-skin input::placeholder{ color:rgba(255,255,255,0.7); }
 
                 /* === ביטול ספינרים מקוריים + חצים מותאמים (גם במובייל) === */
-                .hero-skin input[type="number"]::-webkit-inner-spin-button,
-                .hero-skin input[type="number"]::-webkit-outer-spin-button{
+                .hero-skin input[type="number"]::-webkit-inner-spin_button,
+                .hero-skin input[type="number"]::-webkit-outer-spin_button{
                   -webkit-appearance: none; margin: 0;
                 }
                 .hero-skin input[type="number"]{ -moz-appearance: textfield; }
@@ -794,7 +808,7 @@ export default function Table({
                     <span aria-hidden>{(muteTurn || muteRaise) ? '🔇' : '🔊'}</span>
                   </button>
                   {showMute && (
-                    <div className="force-dark absolute right-0 bottom-full mb-2 w-56 bg-white border border-slate-200 rounded-xl shadow p-3">
+                    <div className="force-dark absolute right-0 bottom_full mb-2 w-56 bg-white border border-slate-200 rounded-xl shadow p-3">
                       <div className="text-sm font-bold mb-2">השתקת צלילים</div>
                       <label className="flex items-center gap-2 text-sm">
                         <input
@@ -827,7 +841,7 @@ export default function Table({
               </div>
               {/* === סוף כפתור MUTE === */}
 
-              <div className="flex items-center justify-between">
+              <div className="flex items_center justify_between">
                 {/* ⬇️ כאן שינוי ה-P/L בלבד (גדול יותר + ירוק בהיר יותר לרווח) */}
                 <div className="flex items-center gap-3">
                   <div className="font-semibold">{hero.name}</div>
@@ -840,7 +854,7 @@ export default function Table({
                       {(() => {
                         const pl = hero.stack - (hero.entryStack ?? 0);
                         const cls =
-                          pl > 0 ? 'bg-emerald-400/25 text-emerald-50' :   // ⬅️ בהיר יותר
+                          pl > 0 ? 'bg-emerald-400/25 text-emerald-50' :
                           pl < 0 ? 'bg-rose-600/25 text-rose-50' :
                                    'bg-slate-500/25 text-slate-50';
                         return (
@@ -873,15 +887,23 @@ export default function Table({
                 </div>
               </div>
 
-              {/* קלפי HERO + WinnerBadge */}
+              {/* קלפי HERO + Winner/Loser (גדול, עם טקסט שחור) */}
               <div className="mt-2 flex flex-col items-center gap-3">
                 {hero.hole && hero.hole.length > 0 && (
                   <HeroCards hole={hero.hole} compact={heroCompact} />
                 )}
                 {state.lastWinners && state.lastWinners.length > 0 && (
-                  <div className="winner-text-force">
-                    <WinnerBadge winners={state.lastWinners} currency={currency} heroSeat={hero.seat} />
-                  </div>
+                  isSeatWinner(hero.seat) ? (
+                    <div className="winner-text-force">
+                      <WinnerBadge winners={state.lastWinners} currency={currency} heroSeat={hero.seat} />
+                    </div>
+                  ) : (
+                    <div className="winner-text-force flex flex-col items-center gap-2">
+                      <HeroLoserBanner />
+                      {/* ⬅️ התוספת היחידה: שורת הסבר מי ניצח ואיך */}
+                      <WinnersCompactLine winners={state.lastWinners} currency={currency} />
+                    </div>
+                  )
                 )}
               </div>
 
@@ -962,19 +984,15 @@ function BoardCards({
     ENTER_MS: number;
   };
 }) {
-  // נשמור מה כרגע מוצג בפועל (אחרי פרילוד + דיליי), כדי שלא יהיה רגע "ריק"
   const [displayed, setDisplayed] = useState<Array<Card | undefined>>([undefined, undefined, undefined, undefined, undefined]);
-  // חתימות הקודמות כדי לזהות קלף חדש/החלפה
   const prevSigRef = useRef<string[]>(['','','','','']);
 
   const isDesktop = useIsDesktop();
-  const ghostY = isDesktop ? -43 : -45; // ghost של קלף שמוחלף
+  const ghostY = isDesktop ? -43 : -45;
 
-  // === קבועי חשיפה ===
-  const REVEAL_GAP_MS = 520;        // פלופ: מרווח בין השמאלי לאמצעי לימני
-  const TURN_RIVER_DELAY_MS = 620;  // טרן/ריבר: השהיה קלה לפני החשיפה
+  const REVEAL_GAP_MS = 520;
+  const TURN_RIVER_DELAY_MS = 620;
 
-  // עם שינוי בקהילה: פרילוד + תזמון סטאגר
   useEffect(() => {
     const curCount  = community.filter(Boolean).length;
     const prevCount = prevSigRef.current.filter(Boolean).length;
@@ -991,15 +1009,12 @@ function BoardCards({
       const sig = sigFor(c);
       const prevSig = prevSigRef.current[i];
 
-      // קלף חדש נכנס לסלוט
       if (c && sig !== prevSig) {
         let delay = 0;
 
         if (isFlopBurst) {
-          // שמאלי → אמצעי → ימני
           delay = i === 0 ? 0 : i === 1 ? REVEAL_GAP_MS : i === 2 ? REVEAL_GAP_MS * 2 : 0;
         } else if ((isTurnReveal && i === 3) || (isRiverReveal && i === 4)) {
-          // טרן או ריבר (קלף יחיד)
           delay = TURN_RIVER_DELAY_MS;
         }
 
@@ -1015,7 +1030,6 @@ function BoardCards({
         tasks.push(t);
       }
 
-      // קלף נעלם (תחילת יד חדשה או ניקוי)
       if (!c && prevSig) {
         setDisplayed(prev => {
           const clone = [...prev];
@@ -1025,11 +1039,9 @@ function BoardCards({
       }
     }
 
-    // עדכון "חתימות" לאחר הסבב
     prevSigRef.current = community.map(sigFor);
   }, [community]);
 
-  // שלבי אפקט המנצח (נפילה/כניסה)
   const [phase, setPhase] = useState<'idle'|'fall'|'enter'|'hold'>('idle');
   const sigOverlayRef = useRef<string>('none');
   useEffect(() => {
@@ -1056,8 +1068,8 @@ function BoardCards({
   return (
     <div className="flex items-center justify-center gap-1.5 md:gap-2 overflow-visible">
       {Array.from({ length: 5 }).map((_, i) => {
-        const c = displayed[i]; // נשתמש במה ש"באמת" מוצג כרגע (אחרי פרילוד+דיליי)
-        const keySig = sigFor(c); // ייצור key חדש כדי להפעיל את האנימציה
+        const c = displayed[i];
+        const keySig = sigFor(c);
 
         const ghosted   = !!winOverlay && phase !== 'idle' && falling.has(i);
         const animateNow= !!winOverlay && phase === 'fall' && falling.has(i);
@@ -1085,12 +1097,10 @@ function BoardCards({
 
         return (
           <div key={i} className={wrapperClasses}>
-            {/* בסיס קבוע: גב קלף תמיד נוכח → אין "רגע ריק" */}
             <div className="absolute inset-0">
               <BackImg className="opacity-60" />
             </div>
 
-            {/* הקלף הנוכחי על הלוח (כולל ghost-lift כשצריך), נכנס מלמטה למעלה */}
             {c && (
               <div className="absolute inset-0" style={ghostStyle}>
                 <AnimatedFace key={`face-${i}-${keySig}`} delayMs={0}>
@@ -1101,7 +1111,6 @@ function BoardCards({
               </div>
             )}
 
-            {/* קלף שנכנס ומחליף בזמן SHOWDOWN (נכנס מלמטה) */}
             {enterCard && (
               <div className="absolute inset-0">
                 <SlideIn>
@@ -1142,6 +1151,51 @@ function HeroCards({ hole, compact = false }:{ hole: Card[]; compact?: boolean }
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/* ⬅️ באנר Loser גדול ל-HERO (בגודל Winner), טקסט שחור */
+function HeroLoserBanner() {
+  return (
+    <div className="pointer-events-none">
+      <div className="rounded-full border-2 border-rose-500 bg-rose-50 px-5 py-1.5 shadow text-lg font-extrabold tracking-wide">
+        Loser <span className="ml-1">👎</span>
+      </div>
+    </div>
+  );
+}
+
+/* ⬅️ חדשים: באנרים ל"גריד" (קומפקטיים, טקסט שחור) */
+function GridWinnerBadge() {
+  return (
+    <div className="rounded-full border border-amber-300 bg-amber-100/90 px-3 py-0.5 text-[12px] font-bold">
+      Winner <span className="ml-0.5">🏆</span>
+    </div>
+  );
+}
+function GridLoserBadge() {
+  return (
+    <div className="rounded-full border border-rose-300 bg-rose-100/90 px-3 py-0.5 text-[12px] font-bold">
+      Loser <span className="ml-0.5">👎</span>
+    </div>
+  );
+}
+
+/* ⬅️ תוספת: שורה קומפקטית שמציגה מי ניצח, איך וכמה (לטקסט שחור ב-Hero הלוזר) */
+function WinnersCompactLine({ winners, currency }: { winners: WinnerInfo[]; currency: string }) {
+  if (!winners || winners.length === 0) return null;
+  return (
+    <div className="text-black text-base md:text-lg font-semibold text-center">
+      {winners.map((w, i) => (
+        <span key={i} className="inline-flex items-baseline">
+          <span className="font-bold">{w.name}</span>
+          <span className="mx-1">—</span>
+          <span>{w.categoryName || 'Win'}</span>
+          <span className="mx-1">({currency}{w.amount})</span>
+          {i < winners.length - 1 ? <span className="mx-2">•</span> : null}
+        </span>
+      ))}
     </div>
   );
 }
