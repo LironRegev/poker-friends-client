@@ -10,6 +10,7 @@ type Player = {
   inHand: boolean; hasActedThisRound: boolean; isAllIn: boolean;
   isOwner?: boolean; holeCount?: number; hole?: Card[]; publicHole?: Card[];
   entryStack?: number; // ⬅️ חדש
+  contributedThisHand?: number; // ⬅️ חדש להצגת כמה הושקע ביד הנוכחית
 };
 type Stage = 'waiting'|'preflop'|'flop'|'turn'|'river'|'showdown';
 
@@ -850,6 +851,16 @@ export default function Table({
                       })()}
                     </div>
                   )}
+
+                  {/* ⬅️ חדש: כמה הושקע ביד הנוכחית (נראה רק כשהיד פעילה) */}
+                  {typeof hero.contributedThisHand === 'number'
+                    && ['preflop','flop','turn','river'].includes(state.stage) && (
+                    <div className="ml-2 text-base">
+                        <span className="px-3 py-1 rounded-full bg-sky-600/25 text-sky-50">
+                        השקעה ביד {currency}{hero.contributedThisHand}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -961,7 +972,7 @@ function BoardCards({
 
   // === קבועי חשיפה ===
   const REVEAL_GAP_MS = 520;        // פלופ: מרווח בין השמאלי לאמצעי לימני
-  const TURN_RIVER_DELAY_MS = 520;  // טרן/ריבר: השהיה קלה לפני החשיפה
+  const TURN_RIVER_DELAY_MS = 620;  // טרן/ריבר: השהיה קלה לפני החשיפה
 
   // עם שינוי בקהילה: פרילוד + תזמון סטאגר
   useEffect(() => {
